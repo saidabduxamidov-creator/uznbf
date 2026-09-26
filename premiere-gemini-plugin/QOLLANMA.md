@@ -1,127 +1,89 @@
-# GeminiCut — Premiere Pro 2024 uchun AI plagin (Gemini AI integratsiyasi)
+# GeminiCut 2.0 — Premiere Pro uchun AI subtitr va montaj paneli
 
-## Avval muhim izoh: ".apk" haqida
-`.apk` — bu Android ilovalari formati, Premiere Pro plaginlariga aloqasi yo'q.
-Premiere Pro plaginlari **CEP extension** (`.zxp` fayl) yoki UXP formatida
-tarqatiladi. Quyida sizga CEP extension tayyorlab berdim — uni ham to'g'ridan-to'g'ri
-papka sifatida (dasturchi rejimida), ham `.zxp` fayl sifatida o'rnatishni ko'rsataman.
+Premiere Pro 2022, 2023, 2024 va **2025** (Windows) uchun.
 
-## Plagin nima qiladi
-1. Timeline'da tanlangan klipni Gemini AI'ga (video+audio) yuboradi.
-2. Gemini o'zbekcha (yoki ruscha/inglizcha) nutqni tinglab:
-   - uzoq pauzalarni, tutilib qolgan va qayta boshlangan gaplarni topadi,
-   - ularni "cut" (kesish) sifatida belgilaydi,
-   - muhim lahzalarda zoom in/out taklif qiladi.
-3. Siz "Timeline'ga qo'llash" tugmasini bosasiz — plagin ExtendScript orqali
-   avtomatik ravishda: pauzalarni ripple-delete qiladi va Motion→Scale
-   keyframe'lari orqali zoom effektini qo'yadi.
+## O'rnatish (boshqa kompyuterda ham)
 
-## Loyiha tuzilishi
+1. `GeminiCut-Setup.bat` faylini ishga tushiring.
+   - Windows "Windows protected your PC" oynasini ko'rsatsa: **More info → Run anyway**
+     (fayl imzolanmagani uchun chiqadi).
+2. Menyuda **1 — O'rnatish** ni tanlang va `Y` ni bosing.
+   - Premiere ochiq bo'lsa, o'rnatuvchi uni yopishni so'raydi.
+3. Premiere Pro'ni oching: **Window → Extensions → GeminiCut - AI Subtitr va Montaj**.
+4. **Sozlamalar** bo'limiga Gemini API kalitini kiriting
+   (bepul: <https://aistudio.google.com/apikey>) va **Kalitni tekshirish** ni bosing.
+
+Admin huquqi kerak emas. O'rnatuvchi faqat quyidagilarni bajaradi:
+
+| Nima | Qayerda |
+|---|---|
+| Plagin fayllari | `%APPDATA%\Adobe\CEP\extensions\com.uzstudio.geminicut` |
+| Imzosiz panelga ruxsat | `HKCU\Software\Adobe\CSXS.9…12` → `PlayerDebugMode = 1` |
+| Jurnal | `%TEMP%\GeminiCut-install.log` |
+
+Buyruq qatori: `GeminiCut-Setup.bat /S` — savolsiz o'rnatish, `/U` — o'chirish.
+
+## Subtitr yaratish
+
+1. Timeline'da video klipni bosib tanlang, paneldagi ↻ tugmasini bosing.
+2. **Nutq tili** (yoki "Avtomatik") va **Subtitr tili**ni tanlang — boshqa tilga tarjima ham mumkin.
+3. Qator uzunligi (standart 42 belgi) va qatorlar sonini (1 yoki 2) belgilang.
+4. **Subtitr yaratish** ni bosing. Jarayon: yuklash → Gemini qayta ishlashi → transkripsiya.
+5. Natijani ro'yxatda tekshiring:
+   - matnni to'g'ridan-to'g'ri tahrirlash mumkin;
+   - vaqtni bossangiz, timeline o'sha joyga o'tadi;
+   - ⚠ belgisi — qator juda uzun yoki o'qish uchun tez.
+6. **Timeline'ga qo'shish** — subtitrlar alohida Subtitle treki sifatida qo'shiladi.
+   SRT fayl `Documents\GeminiCut` papkasida saqlanadi. ⬇ tugmasi bilan SRT'ni boshqa joyga saqlash mumkin.
+
+Subtitr dvigateli avtomatik ravishda: ustma-ust tushgan vaqtlarni tuzatadi, uzun gaplarni
+tinish belgilaridan bo'ladi, qatorlarni muvozanatli ajratadi, minimal ko'rinish vaqti va
+o'qish tezligini (17 belgi/soniya) nazorat qiladi, o'zbekcha `oʻ`, `gʻ`, `ʼ` belgilarini
+bir xil ko'rinishga keltiradi.
+
+## Montaj (pauzalarni kesish, zoom)
+
+1. **Montaj** bo'limida kerakli amallarni yoqing va **Tahlil qilish** ni bosing.
+2. Reja ro'yxatidan keraksiz bandlarni olib tashlang.
+3. **Belgilanganlarni qo'llash** — pauzalar ripple delete qilinadi (video va uning audiosi
+   birga), zoom esa Motion → Scale keyframe'lari orqali qo'yiladi. Boshqa treklar (musiqa, B-roll)
+   o'zgartirilmaydi. Hammasi **Ctrl+Z** bilan bekor qilinadi.
+
+## Bilish kerak bo'lganlar
+
+- Video Gemini'ga yuklanadi (Google serveri). Bir marta yuklangan fayl 44 soat davomida
+  qayta yuklanmaydi — subtitr va montaj uchun bitta yuklash yetadi.
+- Qo'llab-quvvatlanadigan formatlar: MP4, MOV, AVI, WEBM, WMV, MPG, MP3, WAV va boshqalar.
+  MXF, R3D kabi kamera formatlari uchun avval MP4 proksi eksport qiling. Maksimal hajm — 2 GB.
+- AI transkripsiyasi juda aniq, lekin 100% emas: ismlar, atamalar va shovqinli joylarni
+  ro'yxatda tekshirib chiqing.
+- Juda uzun videolarda (1 soatdan ortiq) klipni bo'laklarga bo'lib ishlash tavsiya etiladi.
+
+## Muammolar
+
+| Belgi | Yechim |
+|---|---|
+| Panel menyuda yo'q | Premiere'ni to'liq yopib qayta oching; o'rnatuvchini qayta ishga tushiring |
+| "Premiere" belgisi qizil | Panelni yopib qayta oching |
+| "API kalit noto'g'ri" | Sozlamalarda kalitni qayta kiriting va tekshiring |
+| "hududingizda ishlamayapti" | VPN yoki boshqa tarmoq orqali ulaning |
+| 429 / limit | Bir oz kuting yoki boshqa modelni tanlang |
+
+Batafsil xatolar: **Sozlamalar → Jurnal (diagnostika)**.
+
+## Dasturchilar uchun
+
 ```
 premiere-gemini-plugin/
-├── CSXS/manifest.xml       ← extension manifesti (Premiere 2024 uchun sozlangan)
+├── CSXS/manifest.xml        CEP manifest (PPRO 22+)
 ├── client/
-│   ├── index.html
-│   ├── css/style.css
+│   ├── index.html, css/style.css
 │   └── js/
-│       ├── CSInterface.js  ← O'ZINGIZ QO'SHISHINGIZ KERAK (pastga qarang)
-│       └── main.js         ← panel logikasi + Gemini API chaqiruvlari
-└── host/
-    └── host.jsx            ← Premiere ichida ishlaydigan ExtendScript kod
+│       ├── cep.js           Premiere bilan aloqa (CSInterface.js kerak emas)
+│       ├── gemini.js        Gemini API: oqimli yuklash, retry, bekor qilish
+│       ├── subtitles.js     subtitr dvigateli va SRT
+│       └── main.js          panel logikasi
+└── host/host.jsx            ExtendScript: klip, SRT import, kesish, zoom
 ```
 
-## 1-qadam: CSInterface.js faylini yuklab olish
-Adobe bu faylni CEP ilovalari uchun rasmiy, bepul SDK sifatida taqdim etadi.
-Uni loyihangizga o'zingiz qo'shishingiz kerak (litsenziya sabablari uchun bu
-faylni men avtomatik yaratmadim):
-
-1. https://github.com/Adobe-CEP/CEP-Resources manziliga o'ting
-2. `CEP_11.x/CSInterface.js` (yoki eng yangi versiya) faylini toping
-3. Uni `premiere-gemini-plugin/client/js/CSInterface.js` sifatida saqlang
-
-## 2-qadam: Gemini API kalitini olish
-1. https://aistudio.google.com/apikey ga kiring
-2. "Create API key" tugmasini bosing, kalitni nusxalab oling
-3. Plagin panelidagi "Gemini API kalit" maydoniga shu kalitni kiritasiz
-   (kalit hech qayerga yuborilmaydi, faqat to'g'ridan-to'g'ri Google serveriga ketadi)
-
-## 3-qadam: Dasturchi (debug) rejimini yoqish
-Imzosiz (`.zxp`siz) extensionni ishga tushirish uchun Premiere'ga "ishonch"
-bildirish kerak:
-
-**Windows (Registry Editor — `regedit`):**
-```
-HKEY_CURRENT_USER\Software\Adobe\CSXS.11
-    PlayerDebugMode = 1   (String qiymat)
-```
-(Premiere 2024 uchun CSXS versiyasi 9, 10 yoki 11 bo'lishi mumkin — agar 11
-ishlamasa, `CSXS.9` va `CSXS.10` kalitlarini ham xuddi shunday qo'shib ko'ring)
-
-**macOS (Terminal):**
-```bash
-defaults write com.adobe.CSXS.11 PlayerDebugMode 1
-defaults write com.adobe.CSXS.10 PlayerDebugMode 1
-defaults write com.adobe.CSXS.9 PlayerDebugMode 1
-```
-
-## 4-qadam: Extensionni o'rnatish
-Loyiha papkasini quyidagi manzilga ko'chiring (papka nomini o'zgartirmang):
-
-**Windows:**
-```
-C:\Users\<FOYDALANUVCHI>\AppData\Roaming\Adobe\CEP\extensions\premiere-gemini-plugin
-```
-
-**macOS:**
-```
-~/Library/Application Support/Adobe/CEP/extensions/premiere-gemini-plugin
-```
-
-Agar `CEP\extensions` papkasi mavjud bo'lmasa — o'zingiz shu nom bilan yarating.
-
-## 5-qadam: Premiere Pro'da ishga tushirish
-1. Premiere Pro 2024'ni to'liq yoping va qayta oching
-2. Yuqori menyu: **Window → Extensions → GeminiCut — AI Video Editor**
-3. Panel ochiladi
-
-## 6-qadam: Foydalanish
-1. Timeline'da tahrirlamoqchi bo'lgan klipni bosib tanlang (select qiling)
-2. Panelda **"Tanlash"** tugmasini bosing — fayl yo'li avtomatik yuklanadi
-3. Gemini API kalitni kiriting, tilni tanlang
-4. **"1) Gemini bilan tahlil qilish"** tugmasini bosing va kuting
-   (video uzunligiga qarab 30 soniya — bir necha daqiqa)
-5. Natijani log oynasida ko'rasiz (topilgan segmentlar/zoom takliflari soni)
-6. **"2) Timeline'ga qo'llash"** tugmasini bosing — plagin avtomatik pauzalarni
-   kesadi va zoom keyframe'larini qo'yadi
-
-> Maslahat: har doim originalni nusxalab oling. Avtomatik ripple-delete
-> qaytarib bo'lmaydigan amal emas (Ctrl+Z bilan bekor qilinadi), lekin uzun
-> videoda ehtiyot bo'lish foydali.
-
-## (Ixtiyoriy) .zxp fayl sifatida yig'ish
-Boshqa kompyuterlarga tarqatmoqchi bo'lsangiz, ZXPSignCmd bilan imzolab
-`.zxp` fayl yasashingiz mumkin:
-
-1. https://github.com/Adobe-CEP/CEP-Resources/tree/master/ZXPSignCMD dan
-   o'z platformangizga mos `ZXPSignCmd` ni yuklab oling
-2. Sertifikat yarating:
-   ```bash
-   ZXPSignCmd -selfSignedCert US NY "GeminiCut" "UzStudio" parol123 cert.p12
-   ```
-3. Paketlang:
-   ```bash
-   ZXPSignCmd -sign premiere-gemini-plugin geminicut.zxp cert.p12 parol123
-   ```
-4. Hosil bo'lgan `geminicut.zxp` faylni **ExManCmd** yoki **Anastasiy Extension
-   Manager** (bepul, uchinchi tomon) orqali o'rnatasiz.
-
-## Bilish kerak bo'lgan cheklovlar
-- `host/host.jsx` ichidagi ripple-delete va keyframe operatsiyalari qisman
-  hujjatlanmagan **QE DOM** (`app.enableQE()`) dan foydalanadi — bu Adobe
-  tomonidan rasmiy qo'llab-quvvatlanmaydi va Premiere versiyasiga qarab
-  ba'zi metod nomlari farq qilishi mumkin. Agar xatolik chiqsa, log oynasidagi
-  xabarni ko'rib, `host.jsx`dagi mos qatorni moslashtiring.
-- Gemini'ning o'zbek tilidagi nutqni tushunish sifati aksent, fon shovqini va
-  video sifatiga bog'liq — murakkab audio uchun natijani tekshirib chiqing.
-- Uzun videolarda (>20-30 daqiqa) Gemini so'rovi vaqti va narxi oshadi;
-  kerak bo'lsa videoni bo'laklarga bo'lib yuborish yaxshiroq.
+O'rnatuvchini qayta yig'ish: `./tools/build-installer.sh` (Linux/macOS/WSL).

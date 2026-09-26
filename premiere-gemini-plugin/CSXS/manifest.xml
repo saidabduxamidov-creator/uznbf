@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="9.0" ExtensionBundleId="com.uzstudio.geminicut"
-    ExtensionBundleVersion="1.0.0" ExtensionBundleName="GeminiCut for Premiere Pro">
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.uzstudio.geminicut"
+    ExtensionBundleVersion="2.0.0" ExtensionBundleName="GeminiCut"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
-    <Extension Id="com.uzstudio.geminicut.panel" Version="1.0.0" />
+    <Extension Id="com.uzstudio.geminicut.panel" Version="2.0.0" />
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
-      <!-- PPRO 24.x va 25.x (Premiere Pro 2024/2025) -->
-      <Host Name="PPRO" Version="[24.0,99.9]" />
+      <!-- Premiere Pro 2022 (22.x) dan boshlab: 2024 = 24.x, 2025 = 25.x -->
+      <Host Name="PPRO" Version="[22.0,99.9]" />
     </HostList>
     <LocaleList>
       <Locale Code="All" />
@@ -32,18 +33,17 @@
         </Lifecycle>
         <UI>
           <Type>Panel</Type>
-          <Menu>GeminiCut — AI Video Editor</Menu>
+          <Menu>GeminiCut - AI Subtitr va Montaj</Menu>
           <Geometry>
             <Size>
-              <Height>640</Height>
+              <Height>720</Height>
               <Width>420</Width>
             </Size>
             <MinSize>
-              <Height>500</Height>
-              <Width>360</Width>
+              <Height>480</Height>
+              <Width>340</Width>
             </MinSize>
           </Geometry>
-          <Icons></Icons>
         </UI>
       </DispatchInfo>
     </Extension>

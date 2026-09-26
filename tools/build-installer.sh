@@ -1,13 +1,27 @@
 #!/usr/bin/env bash
-# premiere-gemini-plugin/ papkasidan GeminiCut-Setup.bat ni qayta yig'adi.
+# premiere-gemini-plugin/ papkasidan bitta faylli GeminiCut-Setup.bat yig'adi.
+#   ./tools/build-installer.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+version=$(sed -n 's/.*ExtensionBundleVersion="\([^"]*\)".*/\1/p' premiere-gemini-plugin/CSXS/manifest.xml)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-(zip -qrX "$tmp/payload.zip" premiere-gemini-plugin)
+
+# Faqat ASCII bo'lishi shart (cmd.exe kodlash muammolari bo'lmasligi uchun)
+if LC_ALL=C grep -nP '[^\x00-\x7F]' tools/header.bat; then
+  echo "XATO: tools/header.bat ichida ASCII bo'lmagan belgilar bor" >&2
+  exit 1
+fi
+
+# Barqaror arxiv: fayllar tartiblangan, qo'shimcha atributlarsiz
+(find premiere-gemini-plugin -type f | LC_ALL=C sort | zip -qX -@ "$tmp/payload.zip")
+sha=$(sha256sum "$tmp/payload.zip" | cut -d' ' -f1 | tr 'a-f' 'A-F')
 size=$(stat -c %s "$tmp/payload.zip")
+
 {
-  sed "s/@SIZE@/$size/" tools/header.bat
-  base64 -w 64 "$tmp/payload.zip"
+  sed -e "s/@VERSION@/$version/g" -e "s/@SHA256@/$sha/g" tools/header.bat
+  base64 -w 76 "$tmp/payload.zip"
 } | sed 's/\r$//; s/$/\r/' > GeminiCut-Setup.bat
-echo "GeminiCut-Setup.bat yaratildi (payload: $size bayt)"
+
+echo "GeminiCut-Setup.bat $version tayyor: payload $size bayt, SHA-256 $sha"
