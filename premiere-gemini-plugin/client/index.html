@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>GeminiCut</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <h2>🎬 GeminiCut — AI bilan avtomatik montaj</h2>
+
+  <label>Gemini API kalit</label>
+  <input id="apiKey" type="password" placeholder="AIza..." />
+  <p class="hint">API kalitni Google AI Studio'dan olasiz (aistudio.google.com).</p>
+
+  <label>Faol sequence'dagi klip (media path)</label>
+  <div class="row">
+    <input id="clipPath" placeholder="C:\...\video.mp4" readonly />
+    <button id="pickBtn" style="width:auto;">Tanlash</button>
+  </div>
+
+  <label>Til / kontekst</label>
+  <select id="lang">
+    <option value="uz">O'zbekcha nutq</option>
+    <option value="ru">Ruscha nutq</option>
+    <option value="en">Inglizcha nutq</option>
+  </select>
+
+  <div class="row">
+    <label><input type="checkbox" id="optCuts" checked style="width:auto;"/> Pauza/tutilishlarni kesish</label>
+    <label><input type="checkbox" id="optZoom" checked style="width:auto;"/> Avto zoom in/out</label>
+  </div>
+
+  <button id="analyzeBtn">1) Gemini bilan tahlil qilish</button>
+  <button id="applyBtn" disabled>2) Timeline'ga qo'llash</button>
+
+  <div id="log">Tayyor. Avval klipni tanlang, keyin tahlil qiling.</div>
+
+  <script src="js/CSInterface.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
