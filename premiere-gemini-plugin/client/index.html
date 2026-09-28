@@ -17,6 +17,7 @@
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   </svg>
@@ -38,13 +39,17 @@
 
     <div class="banner" id="banner" hidden></div>
 
-    <section class="clip-card" id="clipCard">
+    <section class="clip-card" id="seqCard">
       <div class="clip-icon"><svg><use href="#i-film"/></svg></div>
       <div class="clip-info">
-        <div class="clip-name" id="clipName">Klip tanlanmagan</div>
-        <div class="clip-meta" id="clipMeta">Timeline'da video klipni bosing, so'ng yangilang</div>
+        <div class="clip-name" id="seqName">Sequence ochilmagan</div>
+        <div class="clip-meta" id="seqMeta">Premiere'da timeline'ni oching</div>
       </div>
-      <button class="icon-btn" id="refreshClip" title="Tanlangan klipni olish"><svg><use href="#i-refresh"/></svg></button>
+      <button class="icon-btn" id="refreshSeq" title="Timeline ma'lumotini yangilash"><svg><use href="#i-refresh"/></svg></button>
+    </section>
+    <section class="track-row" id="trackRow" hidden>
+      <div class="track-label" title="Faqat shu treklar tinglanadi va kesiladi. Musiqa trekini o'chirib qo'ying.">Nutq treklari</div>
+      <div class="chips" id="trackChips"></div>
     </section>
 
     <nav class="tabs" role="tablist">
@@ -98,9 +103,17 @@
             </div>
             <div class="field">
               <span>Oraliq</span>
-              <label class="switch-row"><input type="checkbox" id="onlyRange" checked /><i class="switch"></i><em>Faqat klip qismi</em></label>
+              <div class="segmented" id="range">
+                <button data-v="all" class="on">Butun</button>
+                <button data-v="inout" id="rangeInOut">In → Out</button>
+              </div>
             </div>
           </div>
+
+          <label class="field">
+            <span>Ismlar va atamalar <em class="opt">ixtiyoriy - aniqlikni oshiradi</em></span>
+            <input id="glossary" placeholder="Masalan: Premiere Pro, Toshkent, Dilshod Rahimov" spellcheck="false" />
+          </label>
 
           <button class="btn primary big" id="btnSubs"><svg><use href="#i-spark"/></svg>Subtitr yaratish</button>
         </div>
@@ -109,10 +122,10 @@
           <div class="prog-head"><span class="prog-label">Tayyorlanmoqda...</span><button class="link-btn danger cancel">Bekor qilish</button></div>
           <div class="bar"><i></i></div>
           <ol class="steps">
-            <li data-step="upload">Yuklash</li>
-            <li data-step="process">Qayta ishlash</li>
-            <li data-step="ai">Transkripsiya</li>
-            <li data-step="done">Tayyor</li>
+            <li>Audio eksport</li>
+            <li>Tahlil</li>
+            <li>AI tinglaydi</li>
+            <li>Tayyor</li>
           </ol>
         </div>
 
@@ -137,8 +150,8 @@
       <!-- ============ MONTAJ ============ -->
       <section class="view" id="view-edit">
         <div class="card">
-          <label class="switch-row block"><input type="checkbox" id="optCuts" checked /><i class="switch"></i>
-            <em><b>Pauza va xatolarni kesish</b><small>Uzun sukut, qayta boshlangan gaplar, "eee/mmm"</small></em></label>
+          <label class="switch-row block"><input type="checkbox" id="optPauses" checked /><i class="switch"></i>
+            <em><b>Pauzalarni kesish</b><small>Waveform bo'yicha, kadrgacha aniq · internet kerak emas</small></em></label>
           <div class="field indent">
             <span>Pauza chegarasi</span>
             <div class="segmented" id="pause">
@@ -148,8 +161,11 @@
             </div>
           </div>
           <div class="divider"></div>
+          <label class="switch-row block"><input type="checkbox" id="optRetakes" checked /><i class="switch"></i>
+            <em><b>Takror va xato gaplar <span class="ai-tag">AI</span></b><small>Qayta aytilgan gaplar, chala jumlalar, "eee/mmm"</small></em></label>
+          <div class="divider"></div>
           <label class="switch-row block"><input type="checkbox" id="optZoom" /><i class="switch"></i>
-            <em><b>Avto zoom (punch-in)</b><small>Muhim lahzalarda yengil yaqinlashtirish</small></em></label>
+            <em><b>Avto zoom <span class="ai-tag">AI</span></b><small>Urg'uli gaplarda yengil yaqinlashtirish</small></em></label>
           <div class="field indent">
             <span>Zoom kuchi</span>
             <div class="segmented" id="zoomPower">
@@ -159,16 +175,17 @@
             </div>
           </div>
           <button class="btn primary big" id="btnEdit"><svg><use href="#i-spark"/></svg>Tahlil qilish</button>
+          <p class="note">Tavsiya: avval montaj, keyin subtitr.</p>
         </div>
 
         <div class="progress card" id="progEdit" hidden>
           <div class="prog-head"><span class="prog-label">Tayyorlanmoqda...</span><button class="link-btn danger cancel">Bekor qilish</button></div>
           <div class="bar"><i></i></div>
           <ol class="steps">
-            <li data-step="upload">Yuklash</li>
-            <li data-step="process">Qayta ishlash</li>
-            <li data-step="ai">Tahlil</li>
-            <li data-step="done">Tayyor</li>
+            <li>Audio eksport</li>
+            <li>Pauzalar</li>
+            <li>AI tinglaydi</li>
+            <li>Tayyor</li>
           </ol>
         </div>
 
@@ -180,7 +197,7 @@
             </div>
           </div>
           <div class="cue-list" id="planList"></div>
-          <p class="note">Barcha o'zgarishlarni Premiere'da <b>Ctrl+Z</b> bilan bekor qilish mumkin.</p>
+          <p class="note">Video va tanlangan nutq treklari birga kesiladi, musiqa treki tegilmaydi. Hammasi <b>Ctrl+Z</b> bilan bekor qilinadi.</p>
           <div class="sticky-actions">
             <button class="btn primary" id="btnApplyEdit"><svg><use href="#i-check"/></svg>Belgilanganlarni qo'llash</button>
           </div>
@@ -196,7 +213,7 @@
               <input id="apiKey" type="password" placeholder="AIza..." autocomplete="off" spellcheck="false" />
               <button class="icon-btn" id="toggleKey" title="Ko'rsatish"><svg><use href="#i-eye"/></svg></button>
             </div>
-            <div class="hint">Kalit faqat shu kompyuterda saqlanadi va faqat Google serveriga yuboriladi.
+            <div class="hint">Kalit faqat shu kompyuterda saqlanadi. Gemini'ga video emas, faqat nutq audiosi (16 kHz mono) yuboriladi.
               <a href="#" id="getKey">Bepul kalit olish &rarr;</a></div>
           </div>
           <button class="btn ghost" id="btnTestKey">Kalitni tekshirish</button>
@@ -216,6 +233,15 @@
             <span>Model nomi</span>
             <input id="customModel" placeholder="gemini-..." spellcheck="false" />
           </label>
+          <div class="field">
+            <span>Audio eksport preseti (WAV)</span>
+            <div class="input-group">
+              <input id="presetPath" placeholder="Avtomatik topiladi" readonly spellcheck="false" />
+              <button class="icon-btn" id="btnPreset" title="Tanlash (.epr)"><svg><use href="#i-folder"/></svg></button>
+              <button class="icon-btn" id="btnPresetAuto" title="Avtomatik qidirish"><svg><use href="#i-refresh"/></svg></button>
+            </div>
+            <div class="hint">Premiere o'zining Waveform Audio presetidan foydalanadi. Topilmasa: Export → Format: Waveform Audio → Save Preset, so'ng shu yerda tanlang.</div>
+          </div>
           <label class="field">
             <span>O'zbekcha apostrof uslubi</span>
             <select id="uzStyle">
@@ -230,9 +256,9 @@
             <summary>Jurnal (diagnostika)</summary>
             <pre id="log"></pre>
           </details>
-          <button class="btn ghost" id="btnClearCache">Yuklangan fayllar keshini tozalash</button>
+          <button class="btn ghost" id="btnClearCache">Tahlil keshini tozalash</button>
         </div>
-        <p class="about">GeminiCut <span id="ver">2.0.0</span> &middot; Premiere Pro 2022-2025</p>
+        <p class="about">GeminiCut <span id="ver">3.0.0</span> &middot; Premiere Pro 2022-2025</p>
       </section>
     </main>
 
@@ -241,6 +267,7 @@
 
   <script src="js/cep.js"></script>
   <script src="js/subtitles.js"></script>
+  <script src="js/audio.js"></script>
   <script src="js/gemini.js"></script>
   <script src="js/main.js"></script>
 </body>

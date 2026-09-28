@@ -64,6 +64,7 @@
       let score = -Math.abs(i - ideal) / ideal;
       if (STRONG.test(left)) score += 1.2;
       else if (MEDIUM.test(left)) score += 0.6;
+      if (i < ideal * 0.45) score -= 0.8; // juda kalta bo'lak ("Eng muhimi:") yakka qolmasin
       if (score > bestScore) { bestScore = score; best = i; }
     }
     if (best < 0) {
@@ -148,15 +149,27 @@
       let target = limit;
       if (dur > o.maxDuration && s.text.length > o.maxChars) {
         const n = Math.ceil(dur / o.maxDuration);
-        target = Math.min(limit, Math.max(o.maxChars, Math.ceil(s.text.length / n) + 6));
+        target = Math.min(limit, Math.max(o.maxChars, Math.ceil(s.text.length / n) + 10));
       }
       const pieces = splitText(s.text, target);
       const total = pieces.reduce((a, p) => a + p.length, 0) || 1;
-      let t = s.start;
+      let t = s.start, used = 0;
       pieces.forEach((p, idx) => {
-        const end = idx === pieces.length - 1 ? s.end : t + (dur * p.length) / total;
+        used += p.length;
+        let end = idx === pieces.length - 1 ? s.end : s.start + (dur * used) / total;
+        let nextStart = end;
+        // Bo'linish nuqtasini haqiqiy pauzaga (waveform sukutiga) ko'chirish
+        if (idx < pieces.length - 1 && o.silences) {
+          let best = null;
+          for (const sil of o.silences) {
+            const mid = (sil.start + sil.end) / 2;
+            if (mid <= t + 0.4 || mid >= s.end - 0.4 || Math.abs(mid - end) > 0.7) continue;
+            if (!best || Math.abs(mid - end) < Math.abs((best.start + best.end) / 2 - end)) best = sil;
+          }
+          if (best) { end = Math.min(best.start + 0.12, best.end); nextStart = Math.max(end, best.end - 0.04); }
+        }
         cues.push({ start: t, end: end, text: p });
-        t = end;
+        t = nextStart;
       });
     }
 

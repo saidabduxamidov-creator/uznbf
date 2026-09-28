@@ -1,7 +1,7 @@
 /*
  * GeminiCut - Gemini API mijozi (Node.js https orqali).
- *  - Video fayl xotiraga to'liq o'qilmaydi, oqim (stream) bilan yuklanadi,
- *    shuning uchun katta fayllarda ham panel qotmaydi.
+ *  - Asosiy usul: faqat nutq audiosi (16 kHz mono WAV) so'rov ichida yuboriladi.
+ *  - Files API (oqimli yuklash) ham saqlangan - kerak bo'lsa.
  *  - Har bir so'rovda timeout, bekor qilish (cancel) va qayta urinish bor.
  *  - API kalit URL'da emas, sarlavhada (x-goog-api-key) yuboriladi.
  */
@@ -236,15 +236,21 @@
     throw new GeminiError("Gemini javobini o'qib bo'lmadi (JSON xato). Qayta urinib ko'ring.", "PARSE");
   }
 
-  /* generateContent: fayl + prompt + JSON sxema */
-  async function generateJson({ apiKey, model, file, prompt, schema, token, onRetry, temperature }) {
+  /*
+   * generateContent -> JSON.
+   * audio: Buffer (WAV) - so'rov ichida yuboriladi (inline, 20 MB gacha)
+   * file:  Files API fayli (ixtiyoriy);  ikkalasi bo'lmasa - faqat matnli so'rov
+   */
+  async function generateJson({ apiKey, model, file, audio, prompt, schema, token, onRetry, temperature }) {
+    const parts = [];
+    if (audio) parts.push({ inline_data: { mime_type: "audio/wav", data: audio.toString("base64") } });
+    if (file) parts.push({ file_data: { file_uri: file.uri, mime_type: file.mimeType } });
+    parts.push({ text: prompt });
     const payload = {
-      contents: [{ role: "user", parts: [{ file_data: { file_uri: file.uri, mime_type: file.mimeType } }, { text: prompt }] }],
+      contents: [{ role: "user", parts }],
       generationConfig: {
         temperature: temperature == null ? 0.1 : temperature,
         maxOutputTokens: 65536,
-        // Subtitr va montaj uchun asosan ovoz muhim - past video aniqligi tokenlarni tejaydi
-        mediaResolution: "MEDIA_RESOLUTION_LOW",
         responseMimeType: "application/json",
         responseSchema: schema,
       },

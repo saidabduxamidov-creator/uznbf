@@ -14,6 +14,12 @@ if LC_ALL=C grep -nP '[^\x00-\x7F]' tools/header.bat; then
   exit 1
 fi
 
+# host.jsx ExtendScript tomonidan tizim kodlashida o'qilishi mumkin - faqat ASCII (\uXXXX)
+if LC_ALL=C grep -nP '[^\x00-\x7F]' premiere-gemini-plugin/host/host.jsx; then
+  echo "XATO: host.jsx ichida ASCII bo'lmagan belgilar bor - \\uXXXX ko'rinishida yozing" >&2
+  exit 1
+fi
+
 # Barqaror arxiv: fayllar tartiblangan, qo'shimcha atributlarsiz
 (find premiere-gemini-plugin -type f | LC_ALL=C sort | zip -qX -@ "$tmp/payload.zip")
 sha=$(sha256sum "$tmp/payload.zip" | cut -d' ' -f1 | tr 'a-f' 'A-F')

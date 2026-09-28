@@ -65,5 +65,13 @@
     return null;
   }
 
-  root.GCHost = { available: !!native, evalScript, call, ensureHost, openUrl, saveDialog };
+  function openDialog(title, types) {
+    try {
+      const r = root.cep.fs.showOpenDialogEx(false, false, title, "", types || []);
+      if (r && r.err === 0 && r.data && r.data.length) return r.data[0];
+    } catch (e) { /* dialog mavjud emas */ }
+    return null;
+  }
+
+  root.GCHost = { available: !!native, evalScript, call, ensureHost, openUrl, saveDialog, openDialog };
 })(window);

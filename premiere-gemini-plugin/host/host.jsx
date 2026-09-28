@@ -1,18 +1,18 @@
 /*
- * GeminiCut 2.0 - Premiere Pro ExtendScript tomoni (host).
+ * GeminiCut 3.0 - Premiere Pro ExtendScript tomoni (host).
  *
- * Muhim: ExtendScript ES3 dvigatelida ishlaydi - JSON, Array.forEach,
- * let/const va arrow funksiyalar YO'Q. Panel bilan ma'lumot almashish
- * faqat raqamlar va fayl yo'llari orqali bo'ladi, javob esa gc_json()
- * yordamida qo'lda yig'ilgan JSON satr sifatida qaytariladi.
+ * Ish tamoyili: plagin asl video fayllarni hech qayerga yubormaydi.
+ * Premiere o'zi timeline'ning audiosini (eshitilganidek: kesishlar, In/Out,
+ * faqat tanlangan nutq treklari) WAV qilib eksport qiladi; panel shu audioni
+ * tahlil qiladi va natijani timeline vaqtida qaytaradi.
  *
- * Vaqtlar haqida:
- *   media vaqti    - video faylning o'zidagi soniya (Gemini shu vaqtni qaytaradi)
- *   timeline vaqti - sequence ichidagi soniya
- *   timeline = clip.start + (media - clip.inPoint)
+ * Muhim: ExtendScript ES3 - JSON, forEach, let/const yo'q. Javoblar gc_json()
+ * bilan qo'lda yig'iladi; panel faqat raqam, satr va massiv yuboradi.
+ * Barcha vaqtlar - sequence (timeline) soniyalarida.
  */
 
-var GC_VERSION = "2.0.0";
+var GC_VERSION = "3.0.0";
+var GC_TICKS = 254016000000;
 
 /* ---------------- yordamchi funksiyalar ---------------- */
 
@@ -83,19 +83,32 @@ function gc_normPath(p) {
     return String(p).replace(/\\/g, "/").toLowerCase();
 }
 
-/* Tanlangan video klipni va uning track indeksini topadi */
-function gc_findSelected(seq) {
-    var tracks = seq.videoTracks;
-    for (var t = 0; t < tracks.numTracks; t++) {
-        var track = tracks[t];
-        for (var c = 0; c < track.clips.numItems; c++) {
-            var clip = track.clips[c];
-            if (clip.isSelected && clip.isSelected() && clip.projectItem) {
-                return { clip: clip, trackIndex: t };
-            }
-        }
-    }
-    return null;
+function gc_inArray(arr, v) {
+    for (var i = 0; i < arr.length; i++) if (arr[i] === v) return true;
+    return false;
+}
+
+function gc_isLocked(track) {
+    try { return !!track.isLocked(); } catch (e) { return false; }
+}
+
+function gc_isMuted(track) {
+    try { return !!track.isMuted(); } catch (e) { return false; }
+}
+
+function gc_itemPath(item) {
+    try { return item.projectItem ? gc_normPath(item.projectItem.getMediaPath()) : ""; } catch (e) { return ""; }
+}
+
+/* Sequence In/Out va umumiy uzunlik (soniyada) */
+function gc_seqRange(seq) {
+    var end = parseFloat(seq.end) / GC_TICKS;
+    var inS = 0, outS = end;
+    try { inS = seq.getInPointAsTime().seconds; } catch (e1) { inS = parseFloat(seq.getInPoint()) || 0; }
+    try { outS = seq.getOutPointAsTime().seconds; } catch (e2) { outS = parseFloat(seq.getOutPoint()) || end; }
+    if (!(outS > inS) || outS > end) outS = end;
+    if (inS < 0 || inS >= outS) inS = 0;
+    return { start: inS, end: outS, duration: end };
 }
 
 /* ---------------- panel chaqiradigan funksiyalar ---------------- */
@@ -104,29 +117,123 @@ function gc_ping() {
     return gc_ok({ version: GC_VERSION, host: app.version || "" });
 }
 
-/* Timeline'da tanlangan klip haqida ma'lumot */
-function gc_getSelectedClip() {
+/* Faol sequence haqida: nom, uzunlik, In/Out, audio treklar, timeline "imzosi" */
+function gc_getSequenceInfo() {
     try {
         var seq = app.project.activeSequence;
-        if (!seq) return gc_fail("Faol sequence yo'q. Avval sequence oching.");
-        var found = gc_findSelected(seq);
-        if (!found) return gc_fail("Timeline'da video klipni bosib tanlang.");
-        var clip = found.clip;
-        var path = clip.projectItem.getMediaPath();
-        if (!path) return gc_fail("Bu klipning media fayli topilmadi (nested sequence yoki grafika bo'lishi mumkin).");
+        if (!seq) return gc_fail("Faol sequence yo'q. Timeline'ni oching.");
+        var r = gc_seqRange(seq);
+        var audio = [], sig = [], clipCount = 0;
+        for (var a = 0; a < seq.audioTracks.numTracks; a++) {
+            var at = seq.audioTracks[a];
+            var n = at.clips.numItems;
+            clipCount += n;
+            var covered = 0;
+            for (var c = 0; c < n; c++) {
+                var it = at.clips[c];
+                covered += it.end.seconds - it.start.seconds;
+                sig.push("a" + a + ":" + it.start.seconds.toFixed(3) + "-" + it.end.seconds.toFixed(3));
+            }
+            audio.push({ index: a, name: at.name || ("Audio " + (a + 1)), clips: n, muted: gc_isMuted(at),
+                locked: gc_isLocked(at), coverage: r.duration > 0 ? covered / r.duration : 0 });
+        }
+        for (var v = 0; v < seq.videoTracks.numTracks; v++) {
+            var vt = seq.videoTracks[v];
+            clipCount += vt.clips.numItems;
+            for (var vc = 0; vc < vt.clips.numItems; vc++) {
+                sig.push("v" + v + ":" + vt.clips[vc].start.seconds.toFixed(3) + "-" + vt.clips[vc].end.seconds.toFixed(3));
+            }
+        }
         return gc_ok({
-            path: path,
-            name: clip.name,
-            start: clip.start.seconds,
-            end: clip.end.seconds,
-            inPoint: clip.inPoint.seconds,
-            outPoint: clip.outPoint.seconds,
-            trackIndex: found.trackIndex,
+            id: seq.sequenceID || seq.name,
+            name: seq.name,
+            duration: r.duration,
+            inPoint: r.start,
+            outPoint: r.end,
+            hasRange: r.start > 0.01 || r.end < r.duration - 0.05,
             fps: 1 / gc_frameDuration(seq),
-            sequence: seq.name
+            audioTracks: audio,
+            videoTracks: seq.videoTracks.numTracks,
+            clipCount: clipCount,
+            signature: sig.join("|")
         });
     } catch (e) {
         return gc_fail(e.toString());
+    }
+}
+
+/* Premiere/AME ichidan audio (WAV) eksport presetini qidiradi */
+function gc_collectEpr(folder, depth, out) {
+    if (!folder || !folder.exists || depth < 0) return;
+    var items = folder.getFiles();
+    for (var i = 0; i < items.length; i++) {
+        var f = items[i];
+        if (f instanceof Folder) gc_collectEpr(f, depth - 1, out);
+        else if (/\.epr$/i.test(f.name)) out.push(f);
+    }
+}
+
+function gc_findAudioPreset() {
+    try {
+        var roots = [];
+        var appFolder = new Folder(app.path);
+        roots.push(new Folder(appFolder.fsName + "/MediaIO/systempresets"));
+        roots.push(new Folder(appFolder.fsName + "/Settings"));
+        try {
+            var ames = appFolder.parent.getFiles("Adobe Media Encoder*");
+            for (var m = 0; m < ames.length; m++) roots.push(new Folder(ames[m].fsName + "/MediaIO/systempresets"));
+        } catch (eA) {}
+
+        var best = null, bestScore = 0, files = [];
+        for (var r = 0; r < roots.length; r++) gc_collectEpr(roots[r], 4, files);
+        for (var i = 0; i < files.length; i++) {
+            var f = files[i];
+            var name = decodeURI(f.name);
+            var parent = f.parent ? decodeURI(f.parent.name) : "";
+            var score = 0;
+            if (/^57415645/i.test(parent)) score += 10;            // "WAVE" formati papkasi
+            if (/waveform|\bwav\b/i.test(name)) score += 8;
+            if (score === 0) continue;
+            if (/48\s*k/i.test(name)) score += 2;
+            if (/16[\s-]*bit/i.test(name)) score += 1;
+            if (score > bestScore) { bestScore = score; best = f; }
+        }
+        return gc_ok({ path: best ? best.fsName : "", scanned: files.length });
+    } catch (e) {
+        return gc_fail(e.toString());
+    }
+}
+
+/*
+ * Timeline audiosini WAV qilib eksport qiladi.
+ * tracks  - eksportga kiradigan audio trek indekslari (qolganlari vaqtincha o'chiriladi)
+ * useInOut - true bo'lsa faqat In..Out oralig'i
+ * Trek holatlari (mute) har qanday holatda asl holiga qaytariladi.
+ */
+function gc_exportAudio(outPath, presetPath, tracks, useInOut) {
+    var seq = app.project.activeSequence;
+    if (!seq) return gc_fail("Faol sequence yo'q.");
+    var preset = new File(presetPath);
+    if (!preset.exists) return gc_fail("Audio eksport preseti topilmadi: " + presetPath);
+
+    var saved = [];
+    try {
+        for (var a = 0; a < seq.audioTracks.numTracks; a++) {
+            var t = seq.audioTracks[a];
+            saved.push(gc_isMuted(t));
+            try { t.setMute(gc_inArray(tracks, a) ? 0 : 1); } catch (eM) {}
+        }
+        var r = gc_seqRange(seq);
+        var result = seq.exportAsMediaDirect(outPath, preset.fsName, useInOut ? 1 : 0);
+        var out = new File(outPath);
+        if (!out.exists) return gc_fail("Premiere audioni eksport qilmadi. " + (result || ""));
+        return gc_ok({ path: out.fsName, offset: useInOut ? r.start : 0, end: useInOut ? r.end : r.duration, result: String(result || "") });
+    } catch (e) {
+        return gc_fail("Eksport xatosi: " + e.toString());
+    } finally {
+        for (var s = 0; s < saved.length; s++) {
+            try { seq.audioTracks[s].setMute(saved[s] ? 1 : 0); } catch (eR) {}
+        }
     }
 }
 
@@ -144,10 +251,7 @@ function gc_findItemByPath(root, target, result) {
     }
 }
 
-/*
- * SRT faylni loyihaga import qiladi va faol sequence'ga subtitr treki
- * sifatida qo'shadi. SRT ichidagi vaqtlar allaqachon timeline vaqtida.
- */
+/* SRT (timeline vaqtida) faylni import qilib, sequence'ga subtitr treki qo'shadi */
 function gc_importSrt(srtPath) {
     try {
         var seq = app.project.activeSequence;
@@ -206,28 +310,25 @@ function gc_setKey(param, sec, value) {
     }
 }
 
+/* Berilgan vaqtda turgan klip (track item) */
+function gc_itemAt(track, sec) {
+    for (var c = 0; c < track.clips.numItems; c++) {
+        var it = track.clips[c];
+        if (it.start.seconds <= sec + 1e-4 && it.end.seconds > sec + 1e-4) return it;
+    }
+    return null;
+}
+
 /*
  * Zoom (punch-in) keyframe'lari.
- * zooms = [[mediaVaqt, masshtabFoiz, ushlabTurishSoniya], ...]
- * Masshtab klipning hozirgi Scale qiymatiga nisbatan foizda (masalan 115).
+ * zooms  = [[timelineVaqt, masshtabFoiz, ushlabTurishSoniya], ...]
+ * speech = nutq audio treklari - gapirayotgan odamning videosini topish uchun
  */
-function gc_applyZooms(zooms) {
+function gc_applyZooms(zooms, speech) {
     try {
         var seq = app.project.activeSequence;
         if (!seq) return gc_fail("Faol sequence yo'q.");
-        var found = gc_findSelected(seq);
-        if (!found) return gc_fail("Timeline'da klipni tanlang.");
-        var clip = found.clip;
-        var scale = gc_findScaleParam(clip);
-        if (!scale) return gc_fail("Motion > Scale parametri topilmadi.");
-        if (!scale.areKeyframesSupported()) return gc_fail("Scale uchun keyframe qo'llab-quvvatlanmaydi.");
-
-        var base = 100;
-        try { base = Number(scale.getValue()) || 100; } catch (e0) {}
-        if (!scale.isTimeVarying()) scale.setTimeVarying(true);
-
-        var inP = clip.inPoint.seconds, outP = clip.outPoint.seconds;
-        var ramp = 0.35, applied = 0, lastEnd = -1;
+        var ramp = 0.35, applied = 0, skipped = 0, bases = {};
         zooms.sort(function (a, b) { return a[0] - b[0]; });
 
         for (var i = 0; i < zooms.length; i++) {
@@ -235,95 +336,112 @@ function gc_applyZooms(zooms) {
             var pct = Math.max(102, Math.min(160, zooms[i][1]));
             var hold = Math.max(0.5, Math.min(8, zooms[i][2]));
             var t3 = t0 + ramp + hold + ramp;
-            if (t0 < inP || t3 > outP || t0 < lastEnd + 0.2) continue;
+
+            // Shu vaqtda gapirayotgan audio qaysi fayldan - o'sha fayldagi videoni zoom qilamiz
+            var speakerPath = "";
+            for (var s = 0; s < speech.length && !speakerPath; s++) {
+                if (speech[s] >= seq.audioTracks.numTracks) continue;
+                var ai = gc_itemAt(seq.audioTracks[speech[s]], t0);
+                if (ai) speakerPath = gc_itemPath(ai);
+            }
+            var target = null, fallback = null;
+            for (var v = 0; v < seq.videoTracks.numTracks; v++) {
+                var vt = seq.videoTracks[v];
+                if (gc_isLocked(vt)) continue;
+                var vi = gc_itemAt(vt, t0);
+                if (!vi) continue;
+                if (!fallback) fallback = vi;
+                if (speakerPath && gc_itemPath(vi) === speakerPath) { target = vi; break; }
+            }
+            target = target || fallback;
+            if (!target || t3 > target.end.seconds) { skipped++; continue; }
+
+            var scale = gc_findScaleParam(target);
+            if (!scale || !scale.areKeyframesSupported()) { skipped++; continue; }
+            var key = target.nodeId || (target.start.seconds + ":" + target.end.seconds);
+            if (bases[key] === undefined) {
+                var b = 100;
+                try { b = Number(scale.getValue()) || 100; } catch (eV) {}
+                bases[key] = b;
+                if (!scale.isTimeVarying()) scale.setTimeVarying(true);
+            }
+            var base = bases[key];
             var peak = base * pct / 100;
-            gc_setKey(scale, t0, base);
-            gc_setKey(scale, t0 + ramp, peak);
-            gc_setKey(scale, t0 + ramp + hold, peak);
-            gc_setKey(scale, t3, base);
-            lastEnd = t3;
+            // Keyframe vaqti - klipning media vaqtida
+            var m0 = target.inPoint.seconds + (t0 - target.start.seconds);
+            gc_setKey(scale, m0, base);
+            gc_setKey(scale, m0 + ramp, peak);
+            gc_setKey(scale, m0 + ramp + hold, peak);
+            gc_setKey(scale, m0 + ramp + hold + ramp, base);
             applied++;
         }
-        return gc_ok({ applied: applied });
+        return gc_ok({ applied: applied, skipped: skipped });
     } catch (e) {
         return gc_fail(e.toString());
     }
 }
 
 /*
- * Keraksiz bo'laklarni (pauza, takror) kesib, ripple delete qiladi.
- * cuts = [[mediaBoshi, mediaOxiri], ...]
- * Faqat tanlangan klip va uning audiosi (shu media fayldan) joylashgan treklarda ishlaydi.
+ * Timeline'dagi oraliqlarni kesib, ripple delete qiladi.
+ * ranges = [[boshi, oxiri], ...] - timeline soniyalarida
+ * speech = nutq audio treklari. Barcha qulflanmagan video treklar va shu audio
+ * treklar birga kesiladi (sinxron saqlanadi). Qolgan treklar (musiqa) tegilmaydi.
  */
-function gc_applyCuts(cuts) {
+function gc_applyCuts(ranges, speech) {
     try {
         var seq = app.project.activeSequence;
         if (!seq) return gc_fail("Faol sequence yo'q.");
-        var found = gc_findSelected(seq);
-        if (!found) return gc_fail("Timeline'da klipni tanlang.");
         app.enableQE();
         var qeSeq = qe.project.getActiveSequence();
         if (!qeSeq) return gc_fail("QE sequence topilmadi.");
 
-        var clip = found.clip;
         var fd = gc_frameDuration(seq);
         var settings = seq.getSettings();
-        var clipStart = clip.start.seconds, clipEnd = clip.end.seconds, inP = clip.inPoint.seconds;
-
-        // Shu klipning audiosi: bir xil media fayl va bir xil boshlanish vaqtidagi audio klip(lar)
-        var vTracks = [found.trackIndex], aTracks = [];
-        var mediaPath = gc_normPath(clip.projectItem.getMediaPath());
-        for (var at = 0; at < seq.audioTracks.numTracks; at++) {
-            var aTrack = seq.audioTracks[at];
-            for (var ac = 0; ac < aTrack.clips.numItems; ac++) {
-                var aItem = aTrack.clips[ac];
-                try {
-                    if (aItem.projectItem && gc_normPath(aItem.projectItem.getMediaPath()) === mediaPath &&
-                        Math.abs(aItem.start.seconds - clipStart) < fd) {
-                        aTracks.push(at);
-                        break;
-                    }
-                } catch (eA) {}
-            }
+        var vTracks = [], aTracks = [];
+        for (var v = 0; v < seq.videoTracks.numTracks; v++) {
+            if (!gc_isLocked(seq.videoTracks[v]) && seq.videoTracks[v].clips.numItems > 0) vTracks.push(v);
         }
-
-        // Media vaqtdan timeline vaqtiga o'tkazish, kadrga moslash, chegaradan chiqmaslik
-        var ranges = [];
-        for (var i = 0; i < cuts.length; i++) {
-            var rs = Math.max(gc_snap(clipStart + (cuts[i][0] - inP), fd), clipStart);
-            var re = Math.min(gc_snap(clipStart + (cuts[i][1] - inP), fd), clipEnd);
-            if (re - rs >= fd * 2) ranges.push([rs, re]);
+        for (var s = 0; s < speech.length; s++) {
+            var ai = speech[s];
+            if (ai < seq.audioTracks.numTracks && !gc_isLocked(seq.audioTracks[ai])) aTracks.push(ai);
         }
-        ranges.sort(function (a, b) { return b[0] - a[0]; }); // oxiridan boshiga
-        if (!ranges.length) return gc_ok({ applied: 0 });
+        if (!aTracks.length && !vTracks.length) return gc_fail("Kesish uchun ochiq trek yo'q (hammasi qulflangan).");
+
+        var list = [];
+        for (var i = 0; i < ranges.length; i++) {
+            var rs = gc_snap(ranges[i][0], fd), re = gc_snap(ranges[i][1], fd);
+            if (re - rs >= fd * 2) list.push([rs, re]);
+        }
+        list.sort(function (a, b) { return b[0] - a[0]; }); // oxiridan boshiga
+        if (!list.length) return gc_ok({ applied: 0 });
 
         function razorAt(sec) {
             var tc = gc_time(sec).getFormatted(settings.videoFrameRate, settings.videoDisplayFormat);
-            for (var v = 0; v < vTracks.length; v++) qeSeq.getVideoTrackAt(vTracks[v]).razor(tc);
-            for (var a = 0; a < aTracks.length; a++) qeSeq.getAudioTrackAt(aTracks[a]).razor(tc);
+            for (var x = 0; x < vTracks.length; x++) qeSeq.getVideoTrackAt(vTracks[x]).razor(tc);
+            for (var y = 0; y < aTracks.length; y++) qeSeq.getAudioTrackAt(aTracks[y]).razor(tc);
         }
 
-        function removeRange(tracks, idxs, s, e) {
+        function removeRange(tracks, idxs, s0, e0) {
             for (var n = 0; n < idxs.length; n++) {
                 var track = tracks[idxs[n]];
                 for (var c = track.clips.numItems - 1; c >= 0; c--) {
                     var it = track.clips[c];
-                    if (it.start.seconds >= s - fd / 2 && it.end.seconds <= e + fd / 2) {
-                        it.remove(true, true); // ripple = true
-                    }
+                    if (it.start.seconds >= s0 - fd / 2 && it.end.seconds <= e0 + fd / 2) it.remove(true, true);
                 }
             }
         }
 
-        for (var r = 0; r < ranges.length; r++) {
-            razorAt(ranges[r][1]);
-            razorAt(ranges[r][0]);
+        for (var r = 0; r < list.length; r++) {
+            razorAt(list[r][1]);
+            razorAt(list[r][0]);
         }
-        for (var k = 0; k < ranges.length; k++) {
-            removeRange(seq.videoTracks, vTracks, ranges[k][0], ranges[k][1]);
-            removeRange(seq.audioTracks, aTracks, ranges[k][0], ranges[k][1]);
+        var removed = 0;
+        for (var k = 0; k < list.length; k++) {
+            removeRange(seq.videoTracks, vTracks, list[k][0], list[k][1]);
+            removeRange(seq.audioTracks, aTracks, list[k][0], list[k][1]);
+            removed += list[k][1] - list[k][0];
         }
-        return gc_ok({ applied: ranges.length });
+        return gc_ok({ applied: list.length, seconds: removed });
     } catch (e) {
         return gc_fail(e.toString());
     }
@@ -334,8 +452,7 @@ function gc_setPlayhead(sec) {
     try {
         var seq = app.project.activeSequence;
         if (!seq) return gc_fail("Faol sequence yo'q.");
-        var ticks = Math.round(Math.max(0, sec) * 254016000000);
-        seq.setPlayerPosition(String(ticks));
+        seq.setPlayerPosition(String(Math.round(Math.max(0, sec) * GC_TICKS)));
         return gc_ok({});
     } catch (e) {
         return gc_fail(e.toString());

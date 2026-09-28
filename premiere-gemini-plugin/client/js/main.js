@@ -1,16 +1,22 @@
-/* GeminiCut 2.0 - panel logikasi */
+/*
+ * GeminiCut 3.0 - panel logikasi.
+ *
+ * Oqim:  Premiere timeline audiosini eksport qiladi (video yuborilmaydi)
+ *        -> shu kompyuterda: 16 kHz mono, nutq/sukut xaritasi (VAD)
+ *        -> Gemini faqat nutqni tinglaydi ("miya"): matn, takror/xato gaplar, urg'u
+ *        -> vaqtlar waveform bo'yicha aniqlashtiriladi -> Premiere'ga qo'llanadi
+ */
 (function () {
   "use strict";
 
   const fs = require("fs");
   const os = require("os");
   const pathMod = require("path");
-  const { GCHost, GCSubs, GCGemini } = window;
+  const { GCHost, GCSubs, GCGemini, GCAudio } = window;
 
   const $ = (id) => document.getElementById(id);
-  const LS_SETTINGS = "geminicut.settings.v2";
-  const LS_FILES = "geminicut.files.v2";
-  const FILE_TTL_MS = 44 * 3600 * 1000; // Gemini fayllarni 48 soat saqlaydi
+  const LS_SETTINGS = "geminicut.settings.v3";
+  const LS_TRACKS = "geminicut.tracks.v3";
 
   const LANG_NAMES = {
     uz: "Uzbek (Latin script)", "uz-cyrl": "Uzbek (Cyrillic script)", ru: "Russian", en: "English",
@@ -18,9 +24,9 @@
   };
 
   const state = {
-    clip: null,
-    raw: null,          // Gemini'dan kelgan xom segmentlar (media vaqtida)
-    rawRange: null,
+    seq: null,
+    tracks: [],         // nutq audio treklari (indekslar)
+    cache: null,        // { key, audio, vad, offset, end, transcript, tkey }
     cues: [],
     plan: null,
     busy: false,
@@ -32,8 +38,8 @@
 
   function loadSettings() {
     const def = { apiKey: "", model: "gemini-2.5-flash", customModel: "", uzStyle: "typographic",
-      srcLang: "auto", outLang: "same", maxChars: 42, maxLines: 2, onlyRange: true,
-      cuts: true, pause: 0.8, zoom: false, zoomPower: 115 };
+      srcLang: "auto", outLang: "same", maxChars: 42, maxLines: 2, range: "all", glossary: "",
+      pauses: true, pause: 0.8, retakes: true, zoom: false, zoomPower: 115, presetPath: "" };
     try { return Object.assign(def, JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}")); } catch (e) { return def; }
   }
   function saveSettings() {
@@ -46,8 +52,7 @@
 
   function log(msg) {
     const el = $("log");
-    const t = new Date().toLocaleTimeString();
-    el.textContent += `[${t}] ${msg}\n`;
+    el.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
     if (el.textContent.length > 40000) el.textContent = el.textContent.slice(-30000);
     el.scrollTop = el.scrollHeight;
   }
@@ -60,8 +65,7 @@
     const box = $("toasts");
     while (box.children.length >= 2) box.firstChild.remove();
     box.appendChild(el);
-    const ttl = kind === "err" ? 7000 : 3500;
-    setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 300); }, ttl);
+    setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 300); }, kind === "err" ? 8000 : 3500);
     el.addEventListener("click", () => el.remove());
     log((kind === "err" ? "XATO: " : "") + msg);
   }
@@ -71,7 +75,6 @@
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
     return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s).padStart(2, "0");
   }
-  function fmtMB(bytes) { return (bytes / 1048576).toFixed(bytes > 1e9 ? 0 : 1) + " MB"; }
 
   function setPill(id, ok) {
     const el = $(id);
@@ -81,15 +84,25 @@
 
   function autoSize(ta) { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; }
 
+  async function pool(items, limit, fn) {
+    const results = new Array(items.length);
+    let next = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) { const i = next++; results[i] = await fn(items[i], i); }
+    });
+    await Promise.all(workers);
+    return results;
+  }
+
   /* ================= progress ================= */
 
   function progress(boxId) {
     const box = $(boxId);
     const bar = box.querySelector(".bar");
     const label = box.querySelector(".prog-label");
-    const order = ["upload", "process", "ai", "done"];
+    const order = ["export", "prepare", "ai", "done"];
     return {
-      show() { box.hidden = false; this.step("upload", "Tayyorlanmoqda...", 0); },
+      show() { box.hidden = false; this.step("export", "Tayyorlanmoqda...", null); },
       hide() { box.hidden = true; },
       step(name, text, pct) {
         const idx = order.indexOf(name);
@@ -110,29 +123,87 @@
 
   function setBusy(on) {
     state.busy = on;
-    ["btnSubs", "btnEdit", "btnApplySubs", "btnApplyEdit", "refreshClip"].forEach((id) => { $(id).disabled = on; });
+    ["btnSubs", "btnEdit", "btnApplySubs", "btnApplyEdit", "refreshSeq"].forEach((id) => { $(id).disabled = on; });
+    document.querySelectorAll(".chip").forEach((c) => { c.disabled = on; });
   }
 
-  /* ================= Premiere klip ================= */
+  /* ================= Sequence va treklar ================= */
 
-  async function refreshClip(silent) {
-    const btn = $("refreshClip");
+  function loadTrackChoice(seq) {
+    try {
+      const all = JSON.parse(localStorage.getItem(LS_TRACKS) || "{}");
+      const saved = all[seq.id];
+      if (Array.isArray(saved)) return saved.filter((i) => i < seq.audioTracks.length);
+    } catch (e) { /* e'tiborsiz */ }
+    // Standart: klipi bor va o'chirilmagan treklar. Butun timeline bo'ylab bitta uzun
+    // klipdan iborat trek (fon musiqasi bo'lishi ehtimoli katta) boshqa nutq treki bo'lsa tanlanmaydi.
+    const used = seq.audioTracks.filter((t) => t.clips > 0 && !t.muted);
+    const musicLike = (t) => t.clips <= 2 && t.coverage > 0.7;
+    const speechy = used.filter((t) => !musicLike(t));
+    return (speechy.length ? speechy : used).map((t) => t.index);
+  }
+
+  function saveTrackChoice() {
+    try {
+      const all = JSON.parse(localStorage.getItem(LS_TRACKS) || "{}");
+      all[state.seq.id] = state.tracks;
+      localStorage.setItem(LS_TRACKS, JSON.stringify(all));
+    } catch (e) { /* e'tiborsiz */ }
+  }
+
+  function renderSeq() {
+    const s = state.seq;
+    if (!s) {
+      $("seqName").textContent = "Sequence ochilmagan";
+      $("seqCard").classList.remove("active");
+      $("trackRow").hidden = true;
+      return;
+    }
+    $("seqName").textContent = s.name;
+    const range = s.hasRange ? `In ${GCSubs.formatClock(s.inPoint)} → Out ${GCSubs.formatClock(s.outPoint)}` : "In/Out yo'q";
+    $("seqMeta").textContent = `${fmtDur(s.duration)} · ${Math.round(s.fps * 100) / 100} fps · ${range}`;
+    $("seqCard").classList.add("active");
+
+    const row = $("trackChips");
+    row.innerHTML = "";
+    s.audioTracks.forEach((t) => {
+      const b = document.createElement("button");
+      b.className = "chip" + (state.tracks.includes(t.index) ? " on" : "") + (t.clips ? "" : " empty");
+      b.title = `${t.name} - ${t.clips} ta klip${t.locked ? " (qulflangan)" : ""}`;
+      b.innerHTML = `<b>A${t.index + 1}</b><span></span>`;
+      b.lastChild.textContent = t.name;
+      b.disabled = !t.clips || state.busy;
+      b.addEventListener("click", () => {
+        state.tracks = state.tracks.includes(t.index) ? state.tracks.filter((i) => i !== t.index) : state.tracks.concat(t.index).sort((x, y) => x - y);
+        saveTrackChoice();
+        renderSeq();
+      });
+      row.appendChild(b);
+    });
+    $("trackRow").hidden = !s.audioTracks.length;
+    $("rangeInOut").disabled = !s.hasRange;
+    syncRange();
+  }
+
+  function syncRange() {
+    const useInOut = state.settings.range === "inout" && state.seq && state.seq.hasRange;
+    document.querySelectorAll("#range button").forEach((b) => b.classList.toggle("on", (b.dataset.v === "inout") === useInOut));
+  }
+
+  async function refreshSeq(silent) {
+    const btn = $("refreshSeq");
     btn.classList.add("spin");
     try {
-      const c = await GCHost.call("gc_getSelectedClip", [], 15000);
-      let size = 0;
-      try { size = fs.statSync(c.path).size; } catch (e) { throw new Error("Media fayl diskda topilmadi: " + c.path); }
-      state.clip = Object.assign(c, { size });
-      $("clipName").textContent = c.name;
-      $("clipMeta").textContent = `${fmtDur(c.outPoint - c.inPoint)} · ${pathMod.extname(c.path).slice(1).toUpperCase()} · ${fmtMB(size)} · ${c.sequence}`;
-      $("clipCard").classList.add("active");
-      if (!silent) log("Klip: " + c.path);
-      return state.clip;
+      const s = await GCHost.call("gc_getSequenceInfo", [], 15000);
+      const changed = !state.seq || state.seq.id !== s.id;
+      state.seq = s;
+      if (changed) state.tracks = loadTrackChoice(s);
+      renderSeq();
+      return s;
     } catch (e) {
-      state.clip = null;
-      $("clipName").textContent = "Klip tanlanmagan";
-      $("clipMeta").textContent = e.message;
-      $("clipCard").classList.remove("active");
+      state.seq = null;
+      renderSeq();
+      $("seqMeta").textContent = e.message;
       if (!silent) toast(e.message, "err");
       return null;
     } finally {
@@ -140,56 +211,204 @@
     }
   }
 
-  /* ================= Gemini fayl (kesh bilan) ================= */
+  /* ================= Audio eksport va tahlil (lokal) ================= */
 
-  function fileCacheKey(clip) {
-    const st = fs.statSync(clip.path);
-    return [clip.path, st.size, st.mtimeMs].join("|");
+  function isWavPreset(p) {
+    try {
+      const txt = fs.readFileSync(p, "utf8");
+      return /1463899717/.test(txt) || /waveform|\bwav\b/i.test(pathMod.basename(p));
+    } catch (e) { return false; }
   }
-  function readFileCache() { try { return JSON.parse(localStorage.getItem(LS_FILES) || "{}"); } catch (e) { return {}; } }
-  function writeFileCache(c) { try { localStorage.setItem(LS_FILES, JSON.stringify(c)); } catch (e) { /* e'tiborsiz */ } }
 
-  async function getGeminiFile(clip, prog, token) {
-    const apiKey = state.settings.apiKey;
-    const key = fileCacheKey(clip);
-    const cache = readFileCache();
-    const hit = cache[key];
+  /* Foydalanuvchi saqlagan presetlar: Documents\Adobe\Adobe Media Encoder\<ver>\Presets */
+  function findUserPreset() {
+    const base = pathMod.join(os.homedir(), "Documents", "Adobe", "Adobe Media Encoder");
+    try {
+      for (const ver of fs.readdirSync(base).sort().reverse()) {
+        const dir = pathMod.join(base, ver, "Presets");
+        if (!fs.existsSync(dir)) continue;
+        for (const f of fs.readdirSync(dir)) {
+          const p = pathMod.join(dir, f);
+          if (/\.epr$/i.test(f) && isWavPreset(p)) return p;
+        }
+      }
+    } catch (e) { /* papka yo'q */ }
+    return "";
+  }
 
-    if (hit && Date.now() - hit.savedAt < FILE_TTL_MS) {
-      prog.step("process", "Oldin yuklangan fayl tekshirilmoqda...", null);
-      const f = await GCGemini.getFile(hit.name, apiKey, token).catch(() => null);
-      if (f && f.state === "ACTIVE") { log("Keshdan: " + f.name); return f; }
+  async function resolvePreset() {
+    const s = state.settings;
+    if (s.presetPath && fs.existsSync(s.presetPath)) return s.presetPath;
+    const found = await GCHost.call("gc_findAudioPreset", [], 60000);
+    log(`Preset qidiruvi: ${found.scanned} ta .epr ko'rildi, topildi: ${found.path || "-"}`);
+    const p = found.path || findUserPreset();
+    if (!p) {
+      throw new Error("WAV eksport preseti topilmadi. Premiere'da File → Export → Media: Format = Waveform Audio → " +
+        "Save Preset qiling, so'ng Sozlamalar → Audio preset'da shu .epr faylni tanlang.");
     }
-
-    prog.step("upload", "Video yuklanmoqda...", 0);
-    const started = Date.now();
-    const file = await GCGemini.uploadFile(clip.path, apiKey, {
-      token,
-      onProgress: (sent, total) => {
-        const pct = (sent / total) * 100;
-        const secs = (Date.now() - started) / 1000;
-        const speed = sent / Math.max(secs, 0.1);
-        const eta = speed > 0 ? (total - sent) / speed : 0;
-        prog.pct(pct);
-        prog.text(`Yuklanmoqda ${pct.toFixed(0)}% · ${fmtMB(sent)} / ${fmtMB(total)} · ~${fmtDur(eta)}`);
-      },
-    });
-    log("Yuklandi: " + file.name);
-
-    prog.step("process", "Gemini videoni qayta ishlamoqda...", null);
-    const active = await GCGemini.waitUntilActive(file, apiKey, {
-      token, onTick: (s) => prog.text(`Gemini videoni qayta ishlamoqda... ${s}s`),
-    });
-
-    Object.keys(cache).forEach((k) => { if (Date.now() - cache[k].savedAt > FILE_TTL_MS) delete cache[k]; });
-    cache[key] = { name: active.name, savedAt: Date.now() };
-    writeFileCache(cache);
-    return active;
+    s.presetPath = p;
+    saveSettings();
+    $("presetPath").value = p;
+    return p;
   }
 
-  function requireReady() {
-    if (!GCHost.available) throw new Error("Panel Premiere Pro ichida ochilishi kerak.");
-    if (!state.settings.apiKey) { switchTab("settings"); $("apiKey").focus(); throw new Error("Avval Sozlamalarda Gemini API kalitni kiriting."); }
+  function analysisKey(seq) {
+    const useInOut = state.settings.range === "inout" && seq.hasRange;
+    return [seq.id, seq.signature, useInOut ? `${seq.inPoint}-${seq.outPoint}` : "all", state.tracks.join(",")].join("#");
+  }
+
+  async function prepareAudio(prog, token) {
+    const seq = await refreshSeq(true);
+    if (!seq) throw new Error("Timeline (sequence) ochilmagan.");
+    if (!seq.clipCount) throw new Error("Timeline bo'sh.");
+    if (!state.tracks.length) throw new Error("Kamida bitta nutq audio trekini tanlang (A1, A2...).");
+
+    const key = analysisKey(seq);
+    if (state.cache && state.cache.key === key) { log("Audio tahlil keshdan olindi."); return state.cache; }
+
+    const useInOut = state.settings.range === "inout" && seq.hasRange;
+    const preset = await resolvePreset();
+    const dir = pathMod.join(os.tmpdir(), "GeminiCut");
+    fs.mkdirSync(dir, { recursive: true });
+    const wav = pathMod.join(dir, `timeline_${Date.now()}.wav`);
+
+    prog.step("export", "Premiere timeline audiosini chiqarmoqda...", null);
+    token.check();
+    const ex = await GCHost.call("gc_exportAudio", [wav, preset, state.tracks, useInOut], 30 * 60000);
+    token.check();
+    log(`Eksport: ${ex.path} (offset ${ex.offset.toFixed(2)}s)`);
+
+    try {
+      prog.step("prepare", "Audio tahlil qilinmoqda (shu kompyuterda)...", 0);
+      const audio = await GCAudio.decodeWav(ex.path, (p) => prog.pct(p * 100));
+      const vad = GCAudio.detectSpeech(audio);
+      log(`Audio: ${audio.duration.toFixed(1)}s, nutq bo'laklari: ${vad.regions.length}, shovqin ${vad.noise.toFixed(0)} dB, chegara ${vad.threshold.toFixed(0)} dB`);
+      if (!vad.regions.length) throw new Error("Tanlangan treklarda nutq eshitilmadi. Nutq treklarini (A1, A2...) tekshiring.");
+      state.cache = { key, audio, vad, offset: ex.offset, end: ex.offset + audio.duration };
+      return state.cache;
+    } finally {
+      fs.unlink(ex.path, () => {});
+    }
+  }
+
+  /* ================= Gemini: tinglash (transkripsiya) ================= */
+
+  const TRANSCRIPT_SCHEMA = {
+    type: "OBJECT",
+    properties: {
+      language: { type: "STRING" },
+      segments: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            start: { type: "NUMBER" },
+            end: { type: "NUMBER" },
+            type: { type: "STRING", enum: ["speech", "retake", "filler"] },
+            emphasis: { type: "BOOLEAN" },
+            text: { type: "STRING" },
+          },
+          required: ["start", "end", "type", "text"],
+          propertyOrdering: ["start", "end", "type", "emphasis", "text"],
+        },
+      },
+    },
+    required: ["segments"],
+    propertyOrdering: ["language", "segments"],
+  };
+
+  function transcriptPrompt(chunk, index, total) {
+    const s = state.settings;
+    const limit = s.maxChars * s.maxLines;
+    const src = s.srcLang === "auto" ? "Detect the spoken language automatically." : `The speech is mainly in ${LANG_NAMES[s.srcLang]}.`;
+    const out = s.outLang === "same"
+      ? "Write \"speech\" segments in the ORIGINAL spoken language. Do NOT translate."
+      : `Translate every "speech" segment into ${LANG_NAMES[s.outLang]} - natural, fluent subtitles with the exact meaning. Timings still follow the original speech.`;
+    const glossary = s.glossary.trim()
+      ? `Names and terms that occur in this video - spell them exactly like this: ${s.glossary.trim()}`
+      : "";
+    return [
+      "You are an expert transcriptionist and broadcast subtitle editor.",
+      `You receive an audio excerpt (part ${index + 1} of ${total}, ${(chunk.end - chunk.start).toFixed(1)} seconds) exported from a video editing timeline. There is no video - only listen to the speech.`,
+      src, out, glossary,
+      "",
+      "TIMING (most important):",
+      "- \"start\"/\"end\" are seconds from the beginning of THIS audio excerpt, decimal with millisecond precision.",
+      "- A segment starts exactly when its first word begins and ends exactly when its last word ends. Never guess or space times evenly.",
+      "- Chronological order, no overlaps. Cover all speech in the excerpt.",
+      "",
+      "SEGMENTATION:",
+      `- One segment = one short phrase or sentence, ideally 1-6 seconds and at most ${limit} characters.`,
+      "- Split at natural pauses and punctuation; start a new segment when the speaker changes.",
+      "",
+      "TYPES:",
+      "- \"speech\": normal content. Clean text: no filler sounds, no stutters.",
+      "- \"retake\": a false start, an abandoned/broken sentence, or an earlier attempt that the speaker immediately says again better. Only the earlier, worse attempt is \"retake\"; the final good version is \"speech\". Text = what was said.",
+      "- \"filler\": a standalone hesitation or filler between sentences (eee, mmm, uh, um, ну, это самое). Text = the sound.",
+      "- \"emphasis\": true only for the few most important, emphatic or punchline statements (about one per 20-30 seconds); otherwise false.",
+      "",
+      "TEXT QUALITY:",
+      "- Perfect spelling, grammar, capitalization and punctuation for the output language.",
+      "- Uzbek Latin: official alphabet with oʻ, gʻ, sh, ch, ng and ʼ (e.g. \"oʻzbek\", \"maʼno\"). Uzbek Cyrillic: ў, қ, ғ, ҳ. Russian: correct spelling, ё where needed.",
+      "- Proper names, brands and technical terms in their correct, commonly used form.",
+      "- No speaker names, no [music]/[noise] tags, no emojis. Music, noise or silence without speech produce NO segments. Never invent words.",
+      "",
+      "Return JSON only.",
+    ].filter((l) => l !== "").join("\n");
+  }
+
+  function transcriptKey(cache) {
+    const s = state.settings;
+    return [cache.key, s.srcLang, s.outLang, s.glossary.trim(), modelName(), s.maxChars * s.maxLines].join("#");
+  }
+
+  async function transcribe(cache, prog, token) {
+    const tkey = transcriptKey(cache);
+    if (cache.transcript && cache.tkey === tkey) { log("Transkripsiya keshdan olindi."); return cache.transcript; }
+    const s = state.settings;
+    const { audio, vad } = cache;
+    const chunks = GCAudio.planChunks(audio.duration, vad.silences, 240, 300)
+      .filter((c) => vad.regions.some((r) => r.end > c.start && r.start < c.end));
+    let done = 0;
+    prog.step("ai", `Gemini tinglamoqda: 0/${chunks.length} bo'lak`, 0);
+    const parts = await pool(chunks, 2, async (chunk, i) => {
+      token.check();
+      const wav = GCAudio.encodeWav(audio, chunk.start, chunk.end);
+      const res = await GCGemini.generateJson({
+        apiKey: s.apiKey, model: modelName(), audio: wav, token,
+        prompt: transcriptPrompt(chunk, i, chunks.length), schema: TRANSCRIPT_SCHEMA,
+        onRetry: (e, sec) => prog.text(`${e.message} ${sec}s dan keyin qayta urinish...`),
+      });
+      done++;
+      prog.pct((done / chunks.length) * 100);
+      prog.text(`Gemini tinglamoqda: ${done}/${chunks.length} bo'lak`);
+      if (i === 0) state.detectedLang = res.language || "";
+      const len = chunk.end - chunk.start;
+      return (res.segments || [])
+        .map((seg) => ({
+          start: GCSubs.toNumber(seg.start), end: GCSubs.toNumber(seg.end),
+          type: seg.type || "speech", emphasis: !!seg.emphasis, text: GCSubs.cleanText(seg.text),
+        }))
+        .filter((seg) => isFinite(seg.start) && isFinite(seg.end) && seg.text && seg.start < len + 0.5)
+        .map((seg) => Object.assign(seg, { start: chunk.start + Math.max(0, seg.start), end: chunk.start + Math.min(len, Math.max(seg.end, seg.start)) }));
+    });
+    const all = [].concat(...parts).sort((a, b) => a.start - b.start);
+    // Vaqtlarni haqiqiy nutq chegaralariga yopishtirish, so'ng timeline vaqtiga o'tkazish
+    const snapped = GCAudio.snapToSpeech(all, vad.regions).map((seg) =>
+      Object.assign(seg, { start: seg.start + cache.offset, end: seg.end + cache.offset }));
+    log(`Transkripsiya: ${snapped.length} segment (${snapped.filter((x) => x.type !== "speech").length} ta takror/parazit), til: ${state.detectedLang || "?"}`);
+    setPill("pillKey", true);
+    cache.transcript = snapped;
+    cache.tkey = tkey;
+    return snapped;
+  }
+
+  function requireKey() {
+    if (!state.settings.apiKey) {
+      switchTab("settings");
+      $("apiKey").focus();
+      throw new Error("Avval Sozlamalarda Gemini API kalitni kiriting.");
+    }
   }
 
   async function runJob(progId, job) {
@@ -200,10 +419,8 @@
     setBusy(true);
     prog.show();
     try {
-      requireReady();
-      const clip = await refreshClip(true);
-      if (!clip) throw new Error("Timeline'da video klipni tanlang va qayta urinib ko'ring.");
-      await job(clip, prog, token);
+      if (!GCHost.available) throw new Error("Panel Premiere Pro ichida ochilishi kerak.");
+      await job(prog, token);
       prog.step("done", "Tayyor", 100);
       setTimeout(() => prog.hide(), 900);
     } catch (e) {
@@ -218,63 +435,6 @@
 
   /* ================= SUBTITR ================= */
 
-  const TRANSCRIPT_SCHEMA = {
-    type: "OBJECT",
-    properties: {
-      language: { type: "STRING" },
-      segments: {
-        type: "ARRAY",
-        items: {
-          type: "OBJECT",
-          properties: { start: { type: "NUMBER" }, end: { type: "NUMBER" }, text: { type: "STRING" } },
-          required: ["start", "end", "text"],
-          propertyOrdering: ["start", "end", "text"],
-        },
-      },
-    },
-    required: ["segments"],
-    propertyOrdering: ["language", "segments"],
-  };
-
-  function transcriptPrompt(s, clip) {
-    const limit = s.maxChars * s.maxLines;
-    const src = s.srcLang === "auto"
-      ? "Detect the spoken language automatically."
-      : `The speech is mainly in ${LANG_NAMES[s.srcLang]}.`;
-    const out = s.outLang === "same"
-      ? "Write every segment in the ORIGINAL spoken language. Do NOT translate."
-      : `Translate every segment into ${LANG_NAMES[s.outLang]} - natural, fluent, idiomatic subtitles that keep the exact meaning. Timings must still follow the original speech.`;
-    const range = s.onlyRange
-      ? `Only the part from ${clip.inPoint.toFixed(2)}s to ${clip.outPoint.toFixed(2)}s is used in the edit; transcribe at least that part completely.`
-      : "Transcribe the whole file.";
-    return [
-      "You are a professional subtitle editor and transcriptionist working on broadcast-quality subtitles.",
-      "Transcribe ALL speech in the audio track of this media file.",
-      src, out, range,
-      "",
-      "TIMING (most important):",
-      "- \"start\" and \"end\" are seconds from the very beginning of the file, as decimal numbers with millisecond precision (e.g. 12.345).",
-      "- A segment starts exactly when its first word begins and ends exactly when its last word ends. Listen carefully - never guess or space times evenly.",
-      "- Segments must be in chronological order and must not overlap.",
-      "",
-      "SEGMENTATION:",
-      `- One segment = one short phrase or sentence, ideally 1-6 seconds and at most ${limit} characters.`,
-      "- Split at natural pauses and punctuation. Never split in the middle of a name or a tight phrase.",
-      "- When the speaker changes, start a new segment.",
-      "",
-      "TEXT QUALITY:",
-      "- Perfect spelling, grammar, capitalization and punctuation for the output language.",
-      "- Uzbek Latin: use the official alphabet with oʻ, gʻ, sh, ch, ng and the ʼ sign (e.g. \"oʻzbek\", \"maʼno\").",
-      "- Uzbek Cyrillic: use ў, қ, ғ, ҳ correctly. Russian: correct Cyrillic spelling, use ё where needed.",
-      "- Keep the speaker's words (verbatim meaning) but remove filler sounds (eee, mmm, uh, um, ну-у) and stutters/false starts.",
-      "- Write proper names, brands and technical terms in their correct, commonly used form.",
-      "- Do NOT add speaker names, sound descriptions like [music], emojis, or quotes around segments.",
-      "- Silence, music or noise without speech produces NO segments. Never invent text that was not spoken.",
-      "",
-      "Return JSON only: {\"language\": \"<detected language code>\", \"segments\": [{\"start\": 1.234, \"end\": 3.456, \"text\": \"...\"}]}",
-    ].join("\n");
-  }
-
   function subsOptions() {
     const s = state.settings;
     const spoken = s.srcLang === "auto" ? String(state.detectedLang || "") : s.srcLang;
@@ -283,8 +443,11 @@
   }
 
   function rebuildCues() {
-    if (!state.raw) return;
-    state.cues = GCSubs.buildCues(state.raw, subsOptions(), state.rawRange);
+    const c = state.cache;
+    if (!c || !c.transcript) return;
+    const speech = c.transcript.filter((x) => x.type === "speech");
+    const silences = c.vad.silences.map((x) => ({ start: x.start + c.offset, end: x.end + c.offset }));
+    state.cues = GCSubs.buildCues(speech, Object.assign(subsOptions(), { silences }), { start: c.offset, end: c.end });
     renderCues();
   }
 
@@ -300,10 +463,7 @@
       time.className = "cue-time";
       time.title = "Timeline'da shu joyga o'tish";
       time.innerHTML = `${GCSubs.formatClock(c.start)}<span>${GCSubs.formatClock(c.end)}</span>`;
-      time.addEventListener("click", () => {
-        if (!state.clip) return;
-        GCHost.call("gc_setPlayhead", [state.clip.start + (c.start - state.clip.inPoint)]).catch((e) => toast(e.message, "err"));
-      });
+      time.addEventListener("click", () => GCHost.call("gc_setPlayhead", [c.start]).catch((e) => toast(e.message, "err")));
       const ta = document.createElement("textarea");
       ta.rows = 1;
       ta.value = c.text;
@@ -312,12 +472,10 @@
       badge.className = "cue-badge";
       const check = () => {
         const lines = ta.value.split("\n");
-        const long = lines.some((l) => l.trim().length > s.maxChars);
-        const cps = ta.value.replace(/\s+/g, "").length / Math.max(0.1, c.end - c.start);
         const warns = [];
-        if (long) warns.push(`qator ${s.maxChars} belgidan uzun`);
+        if (lines.some((l) => l.trim().length > s.maxChars)) warns.push(`qator ${s.maxChars} belgidan uzun`);
         if (lines.length > s.maxLines) warns.push(`${lines.length} qator`);
-        if (cps > 21) warns.push("o'qish uchun tez");
+        if (ta.value.replace(/\s+/g, "").length / Math.max(0.1, c.end - c.start) > 21) warns.push("o'qish uchun tez");
         badge.textContent = warns.length ? "⚠ " + warns.join(" · ") : "";
         badge.hidden = !warns.length;
         row.classList.toggle("warn", warns.length > 0);
@@ -335,7 +493,6 @@
     $("subsResults").hidden = false;
   }
 
-  /* Tahrirlangan matnlarni oxirgi marta tekshirib, timeline vaqtidagi SRT yaratadi */
   function finalSrt() {
     const s = state.settings;
     const cues = state.cues
@@ -347,14 +504,14 @@
       })
       .filter((c) => c.text);
     if (!cues.length) throw new Error("Subtitrlar ro'yxati bo'sh.");
-    const offset = state.clip ? state.clip.start - state.clip.inPoint : 0;
-    return "﻿" + GCSubs.toSrt(cues, offset);
+    return "﻿" + GCSubs.toSrt(cues, 0); // vaqtlar allaqachon timeline vaqtida
   }
 
   function srtBaseName() {
-    const base = state.clip ? pathMod.basename(state.clip.path, pathMod.extname(state.clip.path)) : "subtitr";
+    const base = state.seq ? state.seq.name : "subtitr";
     const d = new Date();
-    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
+    const p = (n) => String(n).padStart(2, "0");
+    const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
     return `${base.replace(/[\\/:*?"<>|]/g, "_")}_${stamp}.srt`;
   }
 
@@ -365,28 +522,12 @@
   }
 
   async function onGenerateSubs() {
-    await runJob("progSubs", async (clip, prog, token) => {
-      const s = state.settings;
-      const file = await getGeminiFile(clip, prog, token);
-      prog.step("ai", `${modelName()} nutqni yozmoqda... (bir necha daqiqa olishi mumkin)`, null);
-      const t0 = Date.now();
-      const tick = setInterval(() => prog.text(`${modelName()} nutqni yozmoqda... ${fmtDur((Date.now() - t0) / 1000)}`), 1000);
-      let result;
-      try {
-        result = await GCGemini.generateJson({
-          apiKey: s.apiKey, model: modelName(), file, token,
-          prompt: transcriptPrompt(s, clip), schema: TRANSCRIPT_SCHEMA,
-          onRetry: (e, sec) => prog.text(`${e.message} ${sec}s dan keyin qayta urinish...`),
-        });
-      } finally { clearInterval(tick); }
-
-      setPill("pillKey", true);
-      state.detectedLang = result.language || "";
-      state.raw = Array.isArray(result.segments) ? result.segments : [];
-      state.rawRange = s.onlyRange ? { start: clip.inPoint, end: clip.outPoint } : null;
+    await runJob("progSubs", async (prog, token) => {
+      requireKey();
+      const cache = await prepareAudio(prog, token);
+      await transcribe(cache, prog, token);
       rebuildCues();
-      log(`Transkripsiya: ${state.raw.length} segment, til: ${result.language || "?"}`);
-      if (!state.cues.length) throw new Error("Bu qismda nutq topilmadi.");
+      if (!state.cues.length) throw new Error("Nutq topilmadi.");
       toast(`${state.cues.length} ta subtitr tayyor. Tekshirib, "Timeline'ga qo'shish" ni bosing.`);
     });
   }
@@ -394,10 +535,8 @@
   async function onApplySubs() {
     if (state.busy) return;
     try {
-      if (!state.clip) throw new Error("Avval klipni tanlang.");
-      const srt = finalSrt();
       const file = pathMod.join(outputDir(), srtBaseName());
-      fs.writeFileSync(file, srt, "utf8");
+      fs.writeFileSync(file, finalSrt(), "utf8");
       log("SRT yozildi: " + file);
       setBusy(true);
       await GCHost.call("gc_importSrt", [file], 120000);
@@ -438,86 +577,64 @@
 
   /* ================= MONTAJ ================= */
 
-  const PLAN_SCHEMA = {
-    type: "OBJECT",
-    properties: {
-      summary: { type: "STRING" },
-      cuts: {
-        type: "ARRAY",
-        items: {
-          type: "OBJECT",
-          properties: { start: { type: "NUMBER" }, end: { type: "NUMBER" }, reason: { type: "STRING" } },
-          required: ["start", "end", "reason"],
-          propertyOrdering: ["start", "end", "reason"],
-        },
-      },
-      zooms: {
-        type: "ARRAY",
-        items: {
-          type: "OBJECT",
-          properties: { time: { type: "NUMBER" }, hold: { type: "NUMBER" }, reason: { type: "STRING" } },
-          required: ["time", "hold", "reason"],
-          propertyOrdering: ["time", "hold", "reason"],
-        },
-      },
-    },
-    required: ["summary", "cuts", "zooms"],
-    propertyOrdering: ["summary", "cuts", "zooms"],
-  };
+  const KEEP = 0.15; // kesishda nutq atrofida qoldiriladigan "nafas" (s)
 
-  function editPrompt(s, clip) {
-    return [
-      "You are a senior video editor preparing a clean talking-head edit.",
-      `Only analyse the range ${clip.inPoint.toFixed(2)}s - ${clip.outPoint.toFixed(2)}s of this file. All times are seconds from the start of the file, with millisecond precision.`,
-      "",
-      s.cuts ? [
-        "CUTS - find parts to REMOVE:",
-        `- silences / dead air longer than ${s.pause} seconds (cut the silence, but leave about 0.15s of natural breath on each side of speech);`,
-        "- false starts and repeated takes (keep only the last complete, clean take);",
-        "- filler sounds (eee, mmm, uh, um, ну-у) that stand alone.",
-        "- NEVER cut inside a word or a sentence that is kept. Be precise and conservative.",
-      ].join("\n") : "CUTS: return an empty array.",
-      "",
-      s.zoom ? [
-        "ZOOMS - suggest punch-in zoom moments on key, emphatic statements:",
-        "- at most one every 10 seconds; \"time\" = the moment the emphasis starts; \"hold\" = 1.5 to 4 seconds.",
-      ].join("\n") : "ZOOMS: return an empty array.",
-      "",
-      "Write every \"reason\" and the \"summary\" in Uzbek (Latin script), very short (max 8 words).",
-      "Return JSON only: {\"summary\": \"...\", \"cuts\": [{\"start\": 1.2, \"end\": 2.4, \"reason\": \"...\"}], \"zooms\": [{\"time\": 5.0, \"hold\": 2.0, \"reason\": \"...\"}]}",
-    ].join("\n");
-  }
+  function buildPlan(cache) {
+    const s = state.settings;
+    const off = cache.offset;
+    const speech = (cache.transcript || []).filter((x) => x.type === "speech");
+    const cuts = [];
 
-  function normalizePlan(plan, clip) {
-    const lo = clip.inPoint, hi = clip.outPoint;
-    const cuts = (plan.cuts || [])
-      .map((c) => ({ start: GCSubs.toNumber(c.start) + 0.04, end: GCSubs.toNumber(c.end) - 0.04, reason: GCSubs.cleanText(c.reason) }))
-      .filter((c) => isFinite(c.start) && isFinite(c.end))
-      .map((c) => ({ start: Math.max(lo, c.start), end: Math.min(hi, c.end), reason: c.reason }))
-      .filter((c) => c.end - c.start >= 0.25)
-      .sort((a, b) => a.start - b.start);
+    if (s.pauses) {
+      for (const sil of cache.vad.silences) {
+        const len = sil.end - sil.start;
+        if (len < s.pause) continue;
+        cuts.push({ start: off + sil.start + KEEP, end: off + sil.end - KEEP, reason: `Pauza ${len.toFixed(1)}s`, src: "pause" });
+      }
+    }
+    if (s.retakes && cache.transcript) {
+      for (const seg of cache.transcript) {
+        if (seg.type === "speech") continue;
+        // Kesish qo'shni toza gaplarga tegmasin
+        const prev = speech.filter((x) => x.end <= seg.start + 0.3).pop();
+        const next = speech.find((x) => x.start >= seg.end - 0.3);
+        const start = Math.max(seg.start, prev ? prev.end + 0.02 : -Infinity);
+        const end = Math.min(seg.end, next ? next.start - 0.02 : Infinity);
+        if (end - start < 0.15) continue;
+        const label = seg.type === "retake" ? "Takror / xato gap" : "Parazit tovush";
+        cuts.push({ start, end, reason: `${label}: «${seg.text.slice(0, 40)}»`, src: "ai" });
+      }
+    }
+    cuts.sort((a, b) => a.start - b.start);
     const merged = [];
     for (const c of cuts) {
+      if (c.end - c.start < 0.12) continue;
       const last = merged[merged.length - 1];
-      if (last && c.start <= last.end + 0.05) { last.end = Math.max(last.end, c.end); last.reason = last.reason || c.reason; }
-      else merged.push(c);
+      if (last && c.start <= last.end + 0.1) {
+        last.end = Math.max(last.end, c.end);
+        if (c.src === "ai") last.reason = c.reason;
+      } else merged.push(Object.assign({}, c));
     }
-    const zooms = (plan.zooms || [])
-      .map((z) => ({ time: GCSubs.toNumber(z.time), hold: Math.max(1, Math.min(5, GCSubs.toNumber(z.hold) || 2)), reason: GCSubs.cleanText(z.reason) }))
-      .filter((z) => isFinite(z.time) && z.time >= lo && z.time + z.hold + 0.8 <= hi)
-      // kesiladigan joyga tushgan zoomlar keraksiz
-      .filter((z) => !merged.some((c) => z.time < c.end && z.time + z.hold > c.start))
-      .sort((a, b) => a.time - b.time);
-    return {
-      summary: GCSubs.cleanText(plan.summary),
-      items: merged.map((c) => ({ kind: "cut", on: true, ...c })).concat(zooms.map((z) => ({ kind: "zoom", on: true, ...z }))),
-    };
+
+    const zooms = [];
+    if (s.zoom && cache.transcript) {
+      let lastT = -Infinity;
+      for (const seg of speech) {
+        if (!seg.emphasis || seg.start - lastT < 10) continue;
+        const hold = Math.max(1.2, Math.min(4, seg.end - seg.start - 0.7));
+        if (merged.some((c) => seg.start < c.end && seg.start + hold + 0.7 > c.start)) continue;
+        zooms.push({ time: seg.start, hold, reason: `Urg'u: «${seg.text.slice(0, 40)}»` });
+        lastT = seg.start;
+      }
+    }
+    return merged.map((c) => ({ kind: "cut", on: true, start: c.start, end: c.end, reason: c.reason }))
+      .concat(zooms.map((z) => ({ kind: "zoom", on: true, time: z.time, hold: z.hold, reason: z.reason })));
   }
 
   function renderPlan() {
     const list = $("planList");
     list.innerHTML = "";
-    const items = state.plan.items.slice().sort((a, b) => (a.start || a.time) - (b.start || b.time));
+    const items = state.plan.items.slice().sort((a, b) => (a.start != null ? a.start : a.time) - (b.start != null ? b.start : b.time));
     items.forEach((it) => {
       const row = document.createElement("label");
       row.className = "cue plan-item";
@@ -526,11 +643,17 @@
       cb.checked = it.on;
       cb.addEventListener("change", () => { it.on = cb.checked; updatePlanSummary(); });
       const body = document.createElement("div");
-      const kind = document.createElement("div");
+      const kind = document.createElement("button");
+      kind.type = "button";
       kind.className = "kind " + it.kind;
+      kind.title = "Timeline'da ko'rish";
       kind.textContent = it.kind === "cut"
         ? `✂ ${GCSubs.formatClock(it.start)} - ${GCSubs.formatClock(it.end)} (${(it.end - it.start).toFixed(1)}s)`
         : `⤢ ZOOM ${GCSubs.formatClock(it.time)} · ${it.hold.toFixed(1)}s`;
+      kind.addEventListener("click", (e) => {
+        e.preventDefault();
+        GCHost.call("gc_setPlayhead", [it.kind === "cut" ? it.start : it.time]).catch((er) => toast(er.message, "err"));
+      });
       const reason = document.createElement("div");
       reason.className = "reason";
       reason.textContent = it.reason || "";
@@ -547,26 +670,21 @@
     const cuts = on.filter((i) => i.kind === "cut");
     const saved = cuts.reduce((a, c) => a + (c.end - c.start), 0);
     $("editTitle").textContent = `${cuts.length} ta kesish · ${on.length - cuts.length} ta zoom`;
-    $("editSub").textContent = (state.plan.summary ? state.plan.summary + " · " : "") + `${saved.toFixed(1)}s qisqaradi`;
+    $("editSub").textContent = `Video ${saved.toFixed(1)}s qisqaradi`;
   }
 
   async function onAnalyze() {
-    if (!state.settings.cuts && !state.settings.zoom) return toast("Kamida bitta amalni yoqing (kesish yoki zoom).", "err");
-    await runJob("progEdit", async (clip, prog, token) => {
-      const s = state.settings;
-      const file = await getGeminiFile(clip, prog, token);
-      prog.step("ai", `${modelName()} videoni tahlil qilmoqda...`, null);
-      const plan = await GCGemini.generateJson({
-        apiKey: s.apiKey, model: modelName(), file, token,
-        prompt: editPrompt(s, clip), schema: PLAN_SCHEMA,
-        onRetry: (e, sec) => prog.text(`${e.message} ${sec}s dan keyin qayta urinish...`),
-      });
-      setPill("pillKey", true);
-      state.plan = normalizePlan(plan, clip);
-      state.planClip = clip.path;
+    const s = state.settings;
+    if (!s.pauses && !s.retakes && !s.zoom) return toast("Kamida bitta amalni yoqing.", "err");
+    await runJob("progEdit", async (prog, token) => {
+      const needAI = s.retakes || s.zoom;
+      if (needAI) requireKey();
+      const cache = await prepareAudio(prog, token);
+      if (needAI) await transcribe(cache, prog, token);
+      state.plan = { key: cache.key, items: buildPlan(cache) };
       renderPlan();
-      if (!state.plan.items.length) toast("Kesish yoki zoom uchun joy topilmadi - video toza.");
-      else toast("Reja tayyor. Keraksizlarini olib tashlab, qo'llang.");
+      if (!state.plan.items.length) toast("Kesish yoki zoom uchun joy topilmadi - timeline toza.");
+      else toast("Reja tayyor. Ro'yxatni tekshirib, qo'llang.");
     });
   }
 
@@ -574,19 +692,29 @@
     if (state.busy || !state.plan) return;
     setBusy(true);
     try {
-      const clip = await refreshClip(true);
-      if (!clip || clip.path !== state.planClip) throw new Error("Tahlil qilingan klipni timeline'da qayta tanlang.");
+      const seq = await refreshSeq(true);
+      if (!seq || analysisKey(seq) !== state.plan.key) {
+        throw new Error("Timeline tahlildan keyin o'zgargan. Qaytadan \"Tahlil qilish\" ni bosing.");
+      }
       const on = state.plan.items.filter((i) => i.on);
       const zooms = on.filter((i) => i.kind === "zoom").map((z) => [z.time, state.settings.zoomPower, z.hold]);
       const cuts = on.filter((i) => i.kind === "cut").map((c) => [c.start, c.end]);
       if (!zooms.length && !cuts.length) throw new Error("Hech narsa belgilanmagan.");
       const report = [];
-      // Avval zoom (asl vaqtlar bo'yicha), keyin kesish
-      if (zooms.length) report.push((await GCHost.call("gc_applyZooms", [zooms], 120000)).applied + " ta zoom");
-      if (cuts.length) report.push((await GCHost.call("gc_applyCuts", [cuts], 300000)).applied + " ta kesish");
+      // Avval zoom (keyframe'lar klip ichida qoladi), keyin kesish
+      if (zooms.length) report.push((await GCHost.call("gc_applyZooms", [zooms, state.tracks], 120000)).applied + " ta zoom");
+      if (cuts.length) {
+        const r = await GCHost.call("gc_applyCuts", [cuts, state.tracks], 600000);
+        report.push(`${r.applied} ta kesish (${(r.seconds || 0).toFixed(1)}s)`);
+      }
+      // Timeline o'zgardi - eski tahlil va subtitrlar endi mos emas
       state.plan = null;
+      state.cache = null;
+      state.cues = [];
       $("editResults").hidden = true;
-      toast("Qo'llandi: " + report.join(", ") + ".");
+      $("subsResults").hidden = true;
+      await refreshSeq(true);
+      toast("Qo'llandi: " + report.join(", ") + ". Endi Subtitr bo'limida subtitr yarating.");
     } catch (e) {
       toast(e.message, "err");
     } finally {
@@ -617,6 +745,16 @@
     }
   }
 
+  function onPickPreset() {
+    const p = GCHost.openDialog("WAV eksport presetini tanlang (.epr)", ["epr"]);
+    if (!p) return;
+    if (!isWavPreset(p)) toast("Diqqat: bu preset WAV (Waveform Audio) emasga o'xshaydi.", "err");
+    state.settings.presetPath = p;
+    saveSettings();
+    $("presetPath").value = p;
+    state.cache = null;
+  }
+
   /* ================= UI ulash ================= */
 
   function switchTab(name) {
@@ -630,8 +768,7 @@
   }
 
   function bindSegmented(id, key, cast, onChange) {
-    const el = $(id);
-    const buttons = Array.from(el.querySelectorAll("button"));
+    const buttons = Array.from($(id).querySelectorAll("button"));
     const sync = () => buttons.forEach((b) => b.classList.toggle("on", cast(b.dataset.v) === state.settings[key]));
     buttons.forEach((b) => b.addEventListener("click", () => {
       state.settings[key] = cast(b.dataset.v);
@@ -659,49 +796,52 @@
 
     bindInput("srcLang", "srcLang");
     bindInput("outLang", "outLang");
-    bindInput("onlyRange", "onlyRange");
-    bindInput("maxChars", "maxChars", {
-      event: "input", cast: Number,
-      onChange: () => { $("maxCharsVal").textContent = state.settings.maxChars; },
-    });
+    bindInput("glossary", "glossary");
+    bindInput("maxChars", "maxChars", { event: "input", cast: Number, onChange: () => { $("maxCharsVal").textContent = state.settings.maxChars; } });
     $("maxCharsVal").textContent = state.settings.maxChars;
-    // Uslub o'zgarsa - AI'ni qayta chaqirmasdan subtitrlarni qayta hisoblaymiz
-    $("maxChars").addEventListener("change", rebuildCues);
+    $("maxChars").addEventListener("change", rebuildCues); // AI'ni qayta chaqirmasdan qayta hisoblaymiz
     bindSegmented("maxLines", "maxLines", Number, rebuildCues);
+    document.querySelectorAll("#range button").forEach((b) => b.addEventListener("click", () => {
+      if (b.disabled) return;
+      state.settings.range = b.dataset.v;
+      saveSettings();
+      syncRange();
+    }));
+    syncRange();
 
-    bindInput("optCuts", "cuts");
+    bindInput("optPauses", "pauses");
+    bindInput("optRetakes", "retakes");
     bindInput("optZoom", "zoom");
     bindSegmented("pause", "pause", Number);
     bindSegmented("zoomPower", "zoomPower", Number);
 
-    bindInput("apiKey", "apiKey", {
-      event: "input", cast: (v) => v.trim(),
-      onChange: () => setPill("pillKey", state.settings.apiKey ? null : false),
-    });
+    bindInput("apiKey", "apiKey", { event: "input", cast: (v) => v.trim(), onChange: () => setPill("pillKey", state.settings.apiKey ? null : false) });
     bindInput("model", "model", { onChange: () => { $("customModelWrap").hidden = state.settings.model !== "custom"; } });
     $("customModelWrap").hidden = state.settings.model !== "custom";
     bindInput("customModel", "customModel", { event: "input", cast: (v) => v.trim() });
     bindInput("uzStyle", "uzStyle", { onChange: rebuildCues });
+    $("presetPath").value = state.settings.presetPath || "";
+    $("btnPreset").addEventListener("click", onPickPreset);
+    $("btnPresetAuto").addEventListener("click", () => { state.settings.presetPath = ""; saveSettings(); $("presetPath").value = ""; toast("Preset avtomatik qidiriladi."); });
 
     $("toggleKey").addEventListener("click", () => { const k = $("apiKey"); k.type = k.type === "password" ? "text" : "password"; });
     $("getKey").addEventListener("click", (e) => { e.preventDefault(); GCHost.openUrl("https://aistudio.google.com/apikey"); });
     $("btnTestKey").addEventListener("click", onTestKey);
-    $("btnClearCache").addEventListener("click", () => { writeFileCache({}); toast("Kesh tozalandi."); });
+    $("btnClearCache").addEventListener("click", () => { state.cache = null; toast("Tahlil keshi tozalandi."); });
 
-    $("refreshClip").addEventListener("click", () => refreshClip(false));
+    $("refreshSeq").addEventListener("click", () => refreshSeq(false));
     $("btnSubs").addEventListener("click", onGenerateSubs);
     $("btnApplySubs").addEventListener("click", onApplySubs);
     $("btnSaveSrt").addEventListener("click", onSaveSrt);
     $("btnCopySrt").addEventListener("click", onCopySrt);
     $("btnEdit").addEventListener("click", onAnalyze);
     $("btnApplyEdit").addEventListener("click", onApplyEdit);
-    document.querySelectorAll(".cancel").forEach((b) => b.addEventListener("click", () => {
-      if (state.token) state.token.cancel();
-    }));
+    document.querySelectorAll(".cancel").forEach((b) => b.addEventListener("click", () => { if (state.token) state.token.cancel(); }));
 
-    // Xatolar panelni hech qachon "o'ldirmasin"
     window.addEventListener("error", (e) => log("JS xato: " + e.message));
-    window.addEventListener("unhandledrejection", (e) => log("Promise xato: " + (e.reason && e.reason.message || e.reason)));
+    window.addEventListener("unhandledrejection", (e) => log("Promise xato: " + ((e.reason && e.reason.message) || e.reason)));
+    // Panelga qaytganda timeline ma'lumotini yangilash
+    window.addEventListener("focus", () => { if (!state.busy && GCHost.available) refreshSeq(true); });
 
     setPill("pillKey", state.settings.apiKey ? null : false);
 
@@ -713,7 +853,7 @@
       return;
     }
     GCHost.ensureHost()
-      .then((r) => { setPill("pillHost", true); log(`Premiere ${r.host} bilan ulandi. Host v${r.version}`); refreshClip(true); })
+      .then((r) => { setPill("pillHost", true); log(`Premiere ${r.host} bilan ulandi. Host v${r.version}`); return refreshSeq(true); })
       .catch((e) => { setPill("pillHost", false); toast("Premiere bilan aloqa yo'q: " + e.message, "err"); });
   }
 

@@ -94,6 +94,23 @@ a:hover { text-decoration: underline; }
 .clip-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .clip-meta { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* ---------- nutq treklari ---------- */
+.track-row { display: flex; align-items: center; gap: 8px; margin: 8px 12px 0; }
+.track-label { color: var(--muted); font-size: 11px; font-weight: 600; white-space: nowrap; cursor: help; }
+.chips { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 1px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px; flex: none; max-width: 120px;
+  padding: 4px 9px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted);
+  font: 500 11px var(--font); transition: all 0.15s;
+}
+.chip b { font-weight: 700; color: var(--text); }
+.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip:hover { border-color: rgba(123, 108, 255, 0.5); }
+.chip.on { background: rgba(123, 108, 255, 0.18); border-color: rgba(123, 108, 255, 0.6); color: #d6d1ff; }
+.chip.on::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.chip.empty, .chip:disabled { opacity: 0.4; cursor: default; }
+
 /* ---------- tabs ---------- */
 .tabs {
   position: relative; display: grid; grid-template-columns: repeat(3, 1fr);
@@ -130,6 +147,12 @@ a:hover { text-decoration: underline; }
 .field { display: block; margin-bottom: 12px; }
 .field > span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.2px; }
 .field > span b { color: var(--text); }
+.field > span .opt { font-style: normal; font-weight: 500; color: var(--faint); margin-left: 4px; }
+.ai-tag {
+  display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 4px; vertical-align: 1px;
+  background: var(--grad); color: #fff; font-size: 9px; font-weight: 700; letter-spacing: 0.4px;
+}
+.segmented button:disabled { opacity: 0.35; cursor: not-allowed; }
 .field.indent { margin: 8px 0 4px 38px; }
 .hint { margin-top: 6px; color: var(--faint); font-size: 11px; }
 .divider { height: 1px; background: var(--border); margin: 12px -12px; }
@@ -258,7 +281,8 @@ input[type="range"]::-webkit-slider-thumb {
 .cue-badge { grid-column: 2; color: var(--warn); font-size: 10.5px; margin-top: -2px; }
 .plan-item { grid-template-columns: 18px 1fr; cursor: pointer; }
 .plan-item input { margin: 2px 0 0; accent-color: var(--accent); }
-.plan-item .kind { font: 600 10.5px var(--mono); color: #a5b4fc; }
+.plan-item .kind { font: 600 10.5px var(--mono); color: #a5b4fc; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; }
+.plan-item .kind:hover { color: #fff; }
 .plan-item .kind.zoom { color: #67e8f9; }
 .plan-item .reason { color: var(--muted); font-size: 11px; }
 
