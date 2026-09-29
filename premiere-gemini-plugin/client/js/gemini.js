@@ -268,5 +268,98 @@
     }, token, onRetry, 3);
   }
 
-  root.GCGemini = { GeminiError, createCancelToken, testKey, uploadFile, getFile, waitUntilActive, deleteFile, generateJson, mimeFor };
+  /* Oddiy matn javobi (bloknot, yozish) */
+  async function generateText({ apiKey, model, prompt, token, temperature }) {
+    const payload = {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: temperature == null ? 0.7 : temperature, maxOutputTokens: 65536 },
+    };
+    return withRetry(async () => {
+      const res = await request({
+        method: "POST", url: `https://${HOST}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify(payload), token, timeout: 300000,
+      });
+      if (res.status !== 200) throw apiError(res);
+      const j = parseJson(res.text);
+      if (!j) throw new GeminiError("Gemini javobi noto'g'ri formatda.", "SERVER");
+      return extractText(j).trim();
+    }, token, null, 3);
+  }
+
+  /* ---------------- Veo: kadrdan video (rasmiy Gemini API) ---------------- */
+
+  async function veoStart({ apiKey, model, prompt, imageBase64, mimeType, aspectRatio, token }) {
+    const body = {
+      instances: [{ prompt, image: { bytesBase64Encoded: imageBase64, mimeType: mimeType || "image/png" } }],
+      parameters: { aspectRatio: aspectRatio || "16:9", personGeneration: "allow_adult" },
+    };
+    const send = () => request({
+      method: "POST", url: `https://${HOST}/v1beta/models/${encodeURIComponent(model)}:predictLongRunning`,
+      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify(body), token, timeout: 120000,
+    });
+    let res = await send();
+    // Ba'zi hududlar/modellarda personGeneration qabul qilinmaydi - usiz qayta yuboramiz
+    if (res.status === 400 && /personGeneration|person_generation/i.test(res.text)) {
+      delete body.parameters.personGeneration;
+      res = await send();
+    }
+    if (res.status !== 200) throw apiError(res);
+    const j = parseJson(res.text);
+    if (!j || !j.name) throw new GeminiError("Veo ishni boshlamadi.", "API");
+    return j.name;
+  }
+
+  async function veoPoll(name, apiKey, token) {
+    const res = await request({ method: "GET", url: `https://${HOST}/v1beta/${name}`, headers: { "x-goog-api-key": apiKey }, token, timeout: 60000 });
+    if (res.status !== 200) throw apiError(res);
+    return parseJson(res.text) || {};
+  }
+
+  function veoVideoUri(op) {
+    const r = op.response || {};
+    const g = r.generateVideoResponse || r;
+    const s = (g.generatedSamples || g.generatedVideos || [])[0];
+    return s && s.video && s.video.uri;
+  }
+
+  /* Faylni yuklab oladi (yo'naltirishlarni kuzatadi), .part -> yakuniy nom */
+  function download(url, apiKey, dest, token, onProgress) {
+    const fs = require("fs");
+    return new Promise((resolve, reject) => {
+      const part = dest + ".part";
+      const go = (link, hops) => {
+        const u = new URL(link);
+        const headers = u.hostname === HOST ? { "x-goog-api-key": apiKey } : {};
+        const req = https.get({ hostname: u.hostname, path: u.pathname + u.search, headers }, (res) => {
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && hops < 6) {
+            res.resume();
+            return go(new URL(res.headers.location, link).toString(), hops + 1);
+          }
+          if (res.statusCode !== 200) { res.resume(); return reject(new GeminiError("Videoni yuklab bo'lmadi (" + res.statusCode + ").", "DOWNLOAD")); }
+          const total = Number(res.headers["content-length"]) || 0;
+          let got = 0;
+          const out = fs.createWriteStream(part);
+          res.on("data", (c) => { got += c.length; if (onProgress) onProgress(got, total); });
+          res.pipe(out);
+          out.on("finish", () => {
+            const head = Buffer.alloc(12);
+            const fd = fs.openSync(part, "r"); fs.readSync(fd, head, 0, 12, 0); fs.closeSync(fd);
+            if (head.toString("ascii", 4, 8) !== "ftyp") { fs.unlink(part, () => {}); return reject(new GeminiError("Yuklangan fayl MP4 emas.", "DOWNLOAD")); }
+            fs.renameSync(part, dest);
+            resolve(dest);
+          });
+          out.on("error", reject);
+        });
+        if (token) token.track(req);
+        req.setTimeout(120000, () => req.destroy(new GeminiError("Yuklash to'xtab qoldi.", "TIMEOUT")));
+        req.on("error", (e) => reject(e instanceof GeminiError ? e : friendlyNetworkError(e)));
+      };
+      go(url, 0);
+    });
+  }
+
+  root.GCGemini = { GeminiError, createCancelToken, testKey, uploadFile, getFile, waitUntilActive, deleteFile, generateJson, generateText, mimeFor,
+    veoStart, veoPoll, veoVideoUri, download, sleep };
 })(typeof window !== "undefined" ? window : globalThis);

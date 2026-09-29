@@ -1,5 +1,5 @@
 /*
- * GeminiCut 3.0 - panel logikasi.
+ * GeminiCut 4.0 - panel logikasi (subtitr, montaj, umumiy holat).
  *
  * Oqim:  Premiere timeline audiosini eksport qiladi (video yuborilmaydi)
  *        -> shu kompyuterda: 16 kHz mono, nutq/sukut xaritasi (VAD)
@@ -39,8 +39,14 @@
   function loadSettings() {
     const def = { apiKey: "", model: "gemini-2.5-flash", customModel: "", uzStyle: "typographic",
       srcLang: "auto", outLang: "same", maxChars: 42, maxLines: 2, range: "all", glossary: "",
-      letterCase: "original", punctuation: "keep", autoCaption: false, pauses: true, pause: 0.8, retakes: true, zoom: false, zoomPower: 115, presetPath: "" };
-    try { return Object.assign(def, JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}")); } catch (e) { return def; }
+      letterCase: "original", punctuation: "keep", autoCaption: false, pauses: true, pause: 0.8, retakes: true, zoom: false, zoomPower: 115, presetPath: "",
+      punct: { comma: true, period: true, excl: true, colon: true, quotes: true, apos: true, dash: true, ellipsis: true },
+      claudeKey: "", textAI: "auto", keyBase: "media", motionStrength: 115 };
+    let s = def;
+    try { s = Object.assign(def, JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}")); } catch (e) { /* standart */ }
+    // 3.2 dagi "punctuation: remove" -> yangi format
+    if (s.punctuation === "remove") { Object.keys(s.punct).forEach((k) => { s.punct[k] = false; }); s.punctuation = "keep"; }
+    return s;
   }
   function saveSettings() {
     try { localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings)); } catch (e) { /* e'tiborsiz */ }
@@ -453,6 +459,60 @@
     renderCues();
   }
 
+  /* Harf/tinish uslubini barcha subtitrlarga qayta qo'llaydi (AI'ni qayta chaqirmasdan) */
+  function restyle() {
+    state.cues.forEach((c) => {
+      if (c.styleSource === undefined) c.styleSource = c.text;
+      c.text = GCSubs.styleText(c.styleSource, state.settings);
+    });
+    if (state.cues.length) renderCues();
+  }
+
+  function syncStyleBar() {
+    document.querySelectorAll("#caseBar button").forEach((b) => b.classList.toggle("on", b.dataset.v === state.settings.letterCase));
+    document.querySelectorAll("#punctBar .pchip").forEach((b) => b.classList.toggle("on", state.settings.punct[b.dataset.k] !== false));
+  }
+
+  /* AI imlo tekshiruvi: vaqtlar o'zgarmaydi, faqat matn tuzatiladi */
+  async function onProofread() {
+    if (state.busy || !state.cues.length) return;
+    const btn = $("btnProofread");
+    btn.disabled = true;
+    btn.classList.add("loading");
+    try {
+      const s = state.settings;
+      const lang = s.outLang !== "same" ? LANG_NAMES[s.outLang] : s.srcLang !== "auto" ? LANG_NAMES[s.srcLang] : (state.detectedLang || "the original language");
+      const lines = state.cues.map((c, i) => `${i}\t${(c.styleSource !== undefined ? c.styleSource : c.text).replace(/\n/g, " / ")}`).join("\n");
+      const schema = { type: "object", properties: { fixes: { type: "array", items: { type: "object", properties: { i: { type: "integer" }, text: { type: "string" } } } } } };
+      const prompt = `These are video subtitles in ${lang}, one per line as "index<TAB>text" (" / " marks a line break).
+Fix only real mistakes: spelling, grammar, punctuation, capitalization, wrongly heard words and proper names${s.glossary ? ` (names/terms: ${s.glossary})` : ""}.
+For Uzbek Latin use oʻ, gʻ and ʼ correctly. Do not paraphrase, do not merge or split lines, keep the meaning and length.
+Return only the lines you changed, with their index. Keep " / " line breaks where they are.
+
+${lines}`;
+      const r = await window.GCAI.text({ settings: s, prompt, schema, effort: "medium" });
+      let n = 0;
+      (r.fixes || []).forEach((f) => {
+        const c = state.cues[f.i];
+        if (!c || typeof f.text !== "string" || !f.text.trim()) return;
+        let fixed = f.text.replace(/\s*\/\s*/g, "\n").trim();
+        if (fixed.split("\n").some((l) => l.length > s.maxChars)) fixed = GCSubs.wrapLines(fixed.replace(/\n/g, " "), s.maxChars, s.maxLines).join("\n");
+        const before = c.styleSource !== undefined ? c.styleSource : c.text;
+        if (fixed === before) return;
+        c.fixedFrom = before;
+        c.styleSource = fixed;
+        n++;
+      });
+      restyle();
+      toast(n ? `AI ${n} ta subtitrni tuzatdi (sariq belgilangan).` : "AI xato topmadi - matn toza.");
+    } catch (e) {
+      toast(e.message, "err");
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove("loading");
+    }
+  }
+
   function renderCues() {
     const list = $("cueList");
     list.innerHTML = "";
@@ -460,7 +520,8 @@
     const frag = document.createDocumentFragment();
     state.cues.forEach((c, i) => {
       const row = document.createElement("div");
-      row.className = "cue";
+      row.className = "cue" + (c.fixedFrom ? " fixed" : "");
+      if (c.fixedFrom) row.title = "AI tuzatdi. Oldin: " + c.fixedFrom;
       const time = document.createElement("button");
       time.className = "cue-time";
       time.title = "Timeline'da shu joyga o'tish";
@@ -506,7 +567,7 @@
       })
       .filter((c) => c.text);
     if (!cues.length) throw new Error("Subtitrlar ro'yxati bo'sh.");
-    return "﻿" + GCSubs.toSrt(cues, 0); // vaqtlar allaqachon timeline vaqtida
+    return "\uFEFF" + GCSubs.toSrt(cues, 0); // vaqtlar allaqachon timeline vaqtida
   }
 
   function srtBaseName() {
@@ -573,7 +634,7 @@
   function onCopySrt() {
     try {
       const ta = document.createElement("textarea");
-      ta.value = finalSrt().replace(/^﻿/, "");
+      ta.value = finalSrt().replace(/^\uFEFF/, "");
       document.body.appendChild(ta);
       ta.select();
       document.execCommand("copy");
@@ -754,6 +815,50 @@
     }
   }
 
+  async function onTestClaude() {
+    const btn = $("btnTestClaude");
+    if (!state.settings.claudeKey) return toast("Claude kalitini kiriting.", "err");
+    btn.disabled = true;
+    btn.textContent = "Tekshirilmoqda...";
+    try {
+      await window.GCAI.testClaude(state.settings.claudeKey);
+      toast(`Claude kaliti ishlayapti (${window.GCAI.CLAUDE_MODEL}).`);
+    } catch (e) {
+      toast(e.message, "err");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Claude kalitini tekshirish";
+    }
+  }
+
+  /* Tezkor motion presetlari - tanlangan klip(lar) yoki playhead ostidagi klip */
+  async function onPreset(name, btn) {
+    if (state.busy) return;
+    btn.classList.add("loading");
+    try {
+      const ctx = await GCHost.call("gc_getEditContext", [], 15000);
+      const ops = window.GCMotion.buildPreset(name, ctx, state.settings.motionStrength);
+      const r = await GCHost.call("gc_applyMotion", [ops], 120000);
+      const where = ctx.source === "selection" ? `${ctx.clips.length} ta tanlangan klip` : "playhead ostidagi klip";
+      toast(`${window.GCMotion.PRESETS[name].label}: ${where} (${r.keys} keyframe).` + (r.errors && r.errors.length ? " Diqqat: " + r.errors.join("; ") : ""));
+    } catch (e) {
+      toast(e.message, "err");
+    } finally {
+      btn.classList.remove("loading");
+    }
+  }
+
+  async function onResetMotion() {
+    try {
+      const ctx = await GCHost.call("gc_getEditContext", [], 15000);
+      if (!ctx.clips.length) throw new Error("Klipni tanlang yoki playhead'ni klip ustiga qo'ying.");
+      const r = await GCHost.call("gc_resetMotion", [ctx.clips.map((c) => [c.track, c.start])]);
+      toast(`${r.reset} ta klipning animatsiyasi tozalandi (Scale 100, markaz, burchak 0, shaffoflik 100).`);
+    } catch (e) {
+      toast(e.message, "err");
+    }
+  }
+
   function onPickPreset() {
     const p = GCHost.openDialog("WAV eksport presetini tanlang (.epr)", ["epr"]);
     if (!p) return;
@@ -804,8 +909,19 @@
   function init() {
     document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
 
-    bindInput("letterCase", "letterCase", { onChange: () => { state.cues.forEach(c => { if (c.styleSource === undefined) c.styleSource = c.text; c.text = GCSubs.styleText(c.styleSource, state.settings); }); renderCues(); } });
-    bindInput("punctuation", "punctuation", { onChange: () => { state.cues.forEach(c => { if (c.styleSource === undefined) c.styleSource = c.text; c.text = GCSubs.styleText(c.styleSource, state.settings); }); renderCues(); } });
+    document.querySelectorAll("#caseBar button").forEach((b) => b.addEventListener("click", () => {
+      state.settings.letterCase = b.dataset.v; saveSettings(); syncStyleBar(); restyle();
+    }));
+    document.querySelectorAll("#punctBar .pchip").forEach((b) => b.addEventListener("click", () => {
+      state.settings.punct[b.dataset.k] = state.settings.punct[b.dataset.k] === false; saveSettings(); syncStyleBar(); restyle();
+    }));
+    $("punctAll").addEventListener("click", () => {
+      const anyOff = Object.values(state.settings.punct).some((v) => v === false);
+      Object.keys(state.settings.punct).forEach((k) => { state.settings.punct[k] = anyOff; });
+      saveSettings(); syncStyleBar(); restyle();
+    });
+    $("btnProofread").addEventListener("click", onProofread);
+    syncStyleBar();
     bindInput("autoCaption", "autoCaption");
     bindInput("srcLang", "srcLang");
     bindInput("outLang", "outLang");
@@ -837,6 +953,15 @@
     $("btnPreset").addEventListener("click", onPickPreset);
     $("btnPresetAuto").addEventListener("click", () => { state.settings.presetPath = ""; saveSettings(); $("presetPath").value = ""; toast("Preset avtomatik qidiriladi."); });
 
+    bindInput("claudeKey", "claudeKey", { event: "input", cast: (v) => v.trim() });
+    bindInput("textAI", "textAI");
+    bindInput("keyBase", "keyBase", { onChange: () => GCHost.call("gc_setKeyBase", [state.settings.keyBase]).catch(() => {}) });
+    $("toggleClaudeKey").addEventListener("click", () => { const k = $("claudeKey"); k.type = k.type === "password" ? "text" : "password"; });
+    $("getClaudeKey").addEventListener("click", (e) => { e.preventDefault(); GCHost.openUrl("https://console.anthropic.com/settings/keys"); });
+    $("btnTestClaude").addEventListener("click", onTestClaude);
+    bindSegmented("motionStrength", "motionStrength", Number);
+    document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => onPreset(b.dataset.preset, b)));
+    $("btnResetMotion").addEventListener("click", onResetMotion);
     $("toggleKey").addEventListener("click", () => { const k = $("apiKey"); k.type = k.type === "password" ? "text" : "password"; });
     $("getKey").addEventListener("click", (e) => { e.preventDefault(); GCHost.openUrl("https://aistudio.google.com/apikey"); });
     $("btnTestKey").addEventListener("click", onTestKey);
@@ -866,16 +991,41 @@
       return;
     }
     GCHost.ensureHost()
-      .then((r) => { setPill("pillHost", true); log(`Premiere ${r.host} bilan ulandi. Host v${r.version}`); return refreshSeq(true); })
+      .then((r) => {
+        setPill("pillHost", true);
+        log(`Premiere ${r.host} bilan ulandi. Host v${r.version}`);
+        GCHost.call("gc_setKeyBase", [state.settings.keyBase]).catch(() => {});
+        return refreshSeq(true);
+      })
       .catch((e) => { setPill("pillHost", false); toast("Premiere bilan aloqa yo'q: " + e.message, "err"); });
   }
 
+  function copyText(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+
+  /* Boshqa modullar (Effektlar, Claude, Flow, Bloknot) uchun umumiy interfeys */
   window.GCApplication = {
     isBusy: () => state.busy,
-    lockFlow: (on) => { setBusy(on); }
+    lockFlow: (on) => { setBusy(on); },
+    settings: () => state.settings,
+    sequence: () => state.seq,
+    speechTracks: () => state.tracks.slice(),
+    transcript: () => (state.cache && state.cache.transcript) || null,
+    openSettings: (field) => { switchTab("settings"); if (field && $(field)) $(field).focus(); },
+    timelineChanged: () => { state.cache = null; state.plan = null; refreshSeq(true); },
+    toast,
+    copyText,
   };
   init();
-  if (window.GCFlow) window.GCFlow.init();
+  ["GCLibrary", "GCNotes", "GCClaude", "GCFlow"].forEach((m) => {
+    try { if (window[m]) window[m].init(); } catch (e) { log(m + " ishga tushmadi: " + e.message); }
+  });
   document.querySelectorAll('.tab').forEach(t => t.addEventListener('keydown', e => {
     if (!['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) return;
     e.preventDefault();

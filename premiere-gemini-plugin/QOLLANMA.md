@@ -1,99 +1,86 @@
-# GeminiCut 3.2
+# GeminiCut 4.0 — Premiere Pro uchun AI ish maydoni
 
-Google Flow va yangilangan dizayn bo‘yicha to‘liq qo‘llanma: [flow/README.md](flow/README.md).
+Premiere Pro 2022, 2023, 2024 va **2025** (Windows). Qo'shimcha dastur (Node.js, npm,
+Playwright va hokazo) o'rnatish **shart emas** — hammasi bitta `GeminiCut-Setup.bat` ichida.
 
-Quyida avvalgi subtitr/montaj bo‘limlarining qo‘llanmasi saqlangan.
+## O'rnatish
 
-# GeminiCut 3.0 — Premiere Pro uchun AI subtitr va montaj paneli
+1. `GeminiCut-Setup.bat` ni ishga tushiring → menyuda **1** → `Y`.
+   Windows "Windows protected your PC" desa: **More info → Run anyway** (fayl imzolanmagan).
+2. Premiere Pro'ni qayta oching: **Window → Extensions → GeminiCut - AI Subtitr va Montaj**.
+3. **Sozlamalar**: Gemini API kaliti (bepul, <https://aistudio.google.com/apikey>) va
+   ixtiyoriy ravishda Claude (Anthropic) API kaliti.
 
-Premiere Pro 2022, 2023, 2024 va **2025** (Windows) uchun.
+`/S` — savolsiz o'rnatish, `/U` — o'chirish. Admin huquqi kerak emas.
 
-## Qanday ishlaydi
-
-Plagin **video fayllarni hech qayerga yubormaydi**. Hammasi timeline'ning o'zidan olinadi:
-
-1. **Premiere** timeline audiosini eshitilganidek eksport qiladi — barcha kesishlar,
-   In/Out oralig'i va faqat siz tanlagan **nutq treklari** bilan (musiqa treki vaqtincha o'chiriladi).
-2. **Shu kompyuterda** audio 16 kHz mono'ga o'tkaziladi va to'lqin shakli (waveform)
-   bo'yicha nutq va sukut joylari 10 ms aniqlikda topiladi. Pauzalar shu yerda aniqlanadi —
-   buning uchun internet ham kerak emas.
-3. **Gemini — faqat "miya"**: unga faqat nutq audiosi bo'laklarga (≈4 daqiqadan, sukut joyidan)
-   bo'lib yuboriladi. U matnni yozadi, takror/xato gaplarni va urg'uli joylarni belgilaydi.
-4. Gemini bergan vaqtlar waveform bo'yicha haqiqiy nutq boshlanishi va tugashiga moslashtiriladi,
-   so'ng natija Premiere'ga qo'llanadi.
-
-## O'rnatish (boshqa kompyuterda ham)
-
-1. `GeminiCut-Setup.bat` faylini ishga tushiring.
-   - Windows "Windows protected your PC" oynasini ko'rsatsa: **More info → Run anyway**
-     (fayl imzolanmagani uchun chiqadi).
-2. Menyuda **1 — O'rnatish** ni tanlang va `Y` ni bosing.
-3. Premiere Pro'ni oching: **Window → Extensions → GeminiCut - AI Subtitr va Montaj**.
-4. **Sozlamalar** bo'limiga Gemini API kalitini kiriting
-   (bepul: <https://aistudio.google.com/apikey>) va **Kalitni tekshirish** ni bosing.
-
-Admin huquqi kerak emas. `GeminiCut-Setup.bat /S` — savolsiz o'rnatish, `/U` — o'chirish.
-
-## Ishlatish
-
-**Nutq treklari** (panel tepasida): A1, A2... — qaysi audio treklarda gapirilayotganini belgilang.
-Fon musiqasi treki avtomatik ravishda o'chirilgan bo'ladi; kerak bo'lsa bosib o'zgartiring.
-
-### Montaj (avval shuni qiling)
-- **Pauzalarni kesish** — waveform bo'yicha, AI'siz, kadrgacha aniq. Chegara: 0.5 / 0.8 / 1.2 s.
-- **Takror va xato gaplar (AI)** — qayta aytilgan gaplar, chala jumlalar, "eee/mmm".
-- **Avto zoom (AI)** — urg'uli gaplarda gapirayotgan odamning klipiga yengil zoom.
-
-**Tahlil qilish** → ro'yxatni tekshiring (vaqtni bossangiz timeline o'sha joyga o'tadi) →
-**Belgilanganlarni qo'llash**. Video treklar va tanlangan nutq treklari birga kesiladi (sinxron
-buzilmaydi), musiqa treki tegilmaydi. Hammasi **Ctrl+Z** bilan qaytariladi.
+## Bo'limlar
 
 ### Subtitr
-1. Nutq tili, subtitr tili (tarjima ham mumkin), qator uzunligi va soni, oraliq (Butun yoki In → Out).
-2. **Ismlar va atamalar** maydoniga videodagi ismlar va maxsus so'zlarni yozing — aniqlik oshadi.
-3. **Subtitr yaratish** → ro'yxatda tekshirib, kerak bo'lsa tahrirlang → **Timeline'ga qo'shish**.
+Timeline audiosi (faqat nutq treklari) Premiere'ning o'zi orqali eksport qilinadi, Gemini tinglaydi,
+vaqtlar to'lqin shakli bo'yicha aniqlashtiriladi. **Matn uslubi** kartasi:
+- **Harflar:** Asl · AB (katta) · ab (kichik) · Ab. (gap boshi katta)
+- **Tinish belgilari:** har birini alohida yoqish/o'chirish — `,` `.` `! ?` `: ;` `" «»` `'` `—` `…`.
+  So'z ichidagi oʻ, gʻ, maʼno va 3.5 kabi sonlar hech qachon buzilmaydi.
+- **Imlo** tugmasi — AI imlo va grammatikani tekshiradi, vaqtlarga tegmaydi, tuzatilganlar sariq bo'ladi.
 
-Subtitrlar professional qoidalar bo'yicha tayyorlanadi: vaqtlar waveform'ga moslanadi, uzun gaplar
-tinish belgilari va haqiqiy pauzalardan bo'linadi, qatorlar muvozanatli, minimal ko'rinish vaqti va
-o'qish tezligi nazorat qilinadi, o'zbekcha `oʻ`, `gʻ`, `ʼ` bir xil ko'rinishga keltiriladi.
-SRT fayllar `Documents\GeminiCut` papkasida saqlanadi.
+### Montaj
+- **Tezkor motion:** Zoom In/Out, Punch-in, Ken Burns, Silkinish, Qiyshayish, Fade In/Out —
+  tanlangan klip(lar)ga yoki playhead ostidagi klipga, silliq (easing) keyframe'lar bilan.
+  **Animatsiyani tozalash** — Scale/Position/Rotation/Opacity'ni standartga qaytaradi.
+- **Avto montaj:** pauzalar (waveform, AI'siz), takror/xato gaplar va urg'uli joylarga zoom (AI).
 
-## Audio eksport preseti
+### Effektlar (Animation Composer uslubida)
+- Papkalar daraxti, to'lqin shaklli kartalar, qidiruv, ★ sevimlilar.
+- Kartani bosing — tinglaysiz; **+** yoki ikki marta bosish — playhead joyiga qo'yiladi.
+  **Avto** trek: nutq treklaridan tashqaridagi bo'sh audio trek, bo'lmasa yangi trek yaratiladi.
+- **+** tugmasi — yangi papka; **⬆** — kompyuterdan yuklash (WAV, MP3, M4A, AIFF, OGG, FLAC).
+- 47 ta bazaviy effekt (whoosh, riser, impact, glitch, UI, pop, typing, magic va boshqalar) birinchi
+  ochilishda shu kompyuterda sintez qilinadi — mualliflik huquqi muammosi yo'q.
+- Fayllar: `Documents\GeminiCut\Sounds\<papka>`. O'chirish: kartada sichqonchaning o'ng tugmasi.
 
-Plagin Premiere'ning o'z **Waveform Audio** presetini avtomatik topadi. Topilmasa:
-Premiere'da **File → Export → Media**, Format: **Waveform Audio** → **Save Preset** (.epr),
-so'ng panelda **Sozlamalar → Audio eksport preseti** → 📁 orqali shu faylni tanlang.
+### Claude (Opus 5.5)
+Timeline'da klipni tanlang va oddiy so'z bilan yozing, masalan: *"yuziga sekin zoom qil,
+'eng muhimi' degan joyda punch-in va whoosh qo'y, oxirida fade out"*. Claude:
+- klip kadrlarini ko'radi (vision), nutq matni va effektlar kutubxonangizni biladi;
+- motion keyframe'lar, SFX joylashuvi va (ruxsat bersangiz) kesishlarni rejalashtiradi;
+- reja ro'yxatda ko'rsatiladi — keraksizini olib tashlab, **Qo'llash**. Hammasi Ctrl+Z bilan qaytadi.
+
+### Video AI (kadrdan video)
+- **Veo · avtomatik** — rasmiy Gemini API orqali: kadr + prompt → MP4 → yangi video trek.
+  Gemini kalitingiz ishlatiladi (Veo pullik, AI Studio'da billing kerak).
+- **Google Flow · brauzer** — o'zingizning Flow akkauntingiz/kreditlaringiz:
+  1. **Flow'ni ochish / Google'ga kirish** — alohida GeminiCut brauzer oynasi ochiladi;
+     Google'ga bir marta kirasiz, profil eslab qoladi (asosiy Chrome profilingizga tegilmaydi).
+  2. Flow'da "Frames to Video" ni tanlang, playhead'ni kadrga qo'ying, promptni yozing, **Flow'ga yuborish**.
+  3. Plagin kadrni yuklaydi va promptni yozadi; Generate'ni siz bosasiz (yoki avtomatik bosish yoqiladi).
+  4. Video tayyor bo'lgach Flow'da **Download** — plagin MP4'ni ushlab timeline'ga qo'yadi.
+
+### Bloknot
+Bir nechta qayd (`Documents\GeminiCut\Notes`), avtomatik saqlash, so'z/o'qish vaqti hisoblagichi.
+**AI yozuvchi:** senariy yozish, davom ettirish, qisqartirish, imloni tuzatish, YouTube sarlavha/tavsif/teglar,
+erkin topshiriq. **Videodagi nutq** — subtitr matnini qaydga qo'shadi.
 
 ## Muammolar
 
 | Belgi | Yechim |
 |---|---|
-| Panel menyuda yo'q | Premiere'ni to'liq yopib qayta oching; o'rnatuvchini qayta ishga tushiring |
-| "WAV eksport preseti topilmadi" | Yuqoridagi "Audio eksport preseti" bo'limiga qarang |
-| "Tanlangan treklarda nutq eshitilmadi" | Nutq treklarini (A1, A2...) to'g'ri belgilang |
-| "API kalit noto'g'ri" | Sozlamalarda kalitni qayta kiriting va tekshiring |
-| "hududingizda ishlamayapti" | VPN yoki boshqa tarmoq orqali ulaning |
-| 429 / limit | Bir oz kuting yoki boshqa modelni tanlang |
+| Zoom/motion ko'rinmayapti | Sozlamalar → **Keyframe vaqti** → "Klip boshidan" ni tanlab qayta sinang |
+| "WAV eksport preseti topilmadi" | Export → Format: Waveform Audio → Save Preset → Sozlamalarda tanlang |
+| Flow: "Chrome yoki Edge topilmadi" | Google Chrome yoki Microsoft Edge o'rnating |
+| Flow: rasm yuklash maydoni topilmadi | Flow'da "Frames to Video" rejimini tanlab, birinchi kadr (+) tugmasini bosing |
+| Veo modellari yo'q | AI Studio'da billing yoqing yoki Google Flow usulidan foydalaning |
+| Claude: kalit noto'g'ri / kredit yo'q | console.anthropic.com da kalit va balansni tekshiring |
 
-Batafsil: **Sozlamalar → Jurnal (diagnostika)**.
-
-## Bilish kerak bo'lganlar
-- AI transkripsiyasi juda aniq, lekin 100% emas — ismlar va shovqinli joylarni tekshiring.
-- Tezligi o'zgartirilgan (speed/duration) kliplarda zoom vaqti biroz siljishi mumkin.
-- Kesishdan keyin timeline o'zgaradi — subtitrni montajdan **keyin** yarating.
+Batafsil: **Sozlamalar → Jurnal**.
 
 ## Dasturchilar uchun
 
 ```
-premiere-gemini-plugin/
-├── CSXS/manifest.xml        CEP manifest (PPRO 22+)
-├── client/js/
-│   ├── cep.js               Premiere bilan aloqa (CSInterface.js kerak emas)
-│   ├── audio.js             WAV o'qish, VAD, bo'laklash, vaqtni moslash
-│   ├── gemini.js            Gemini API: retry, bekor qilish
-│   ├── subtitles.js         subtitr dvigateli va SRT
-│   └── main.js              panel logikasi
-└── host/host.jsx            ExtendScript: audio eksport, SRT import, kesish, zoom
+client/js/  cep.js (Premiere aloqa) · audio.js (VAD) · subtitles.js · gemini.js (Gemini + Veo)
+            ai.js (Claude HTTPS + umumiy matn AI) · motion.js (easing, presetlar) · sfxgen.js
+            library.js (effektlar) · notes.js · claude.js · cdp.js (Chrome DevTools) · flow.js · main.js
+host/host.jsx  ExtendScript (faqat ASCII): audio/kadr eksporti, motion, SFX, kesish, SRT, import
+tests/      node --test tests/*.test.cjs  ·     node tests/ui.e2e.cjs  (Chromium + Premiere taqlidi)
 ```
 
-O'rnatuvchini qayta yig'ish: `./tools/build-installer.sh`.
+O'rnatuvchini yig'ish: `./tools/build-installer.sh`.

@@ -31,7 +31,10 @@ set "GC_LOG=%TEMP%\GeminiCut-install.log"
 set "GC_WORK=%TEMP%\GeminiCut-%RANDOM%%RANDOM%"
 set "GC_SILENT="
 
-if /I "%~1"=="/S" set "GC_SILENT=1" & goto :install
+if /I "%~1"=="/S" (
+    set "GC_SILENT=1"
+    goto :install
+)
 if /I "%~1"=="/U" goto :uninstall
 if /I "%~1"=="/?" goto :usage
 
@@ -124,6 +127,8 @@ echo     1. Premiere Pro'ni oching (ochiq bo'lsa - to'liq yopib qayta oching).
 echo     2. Window ^> Extensions ^> GeminiCut - AI Subtitr va Montaj
 echo     3. Sozlamalar bo'limiga Gemini API kalitingizni kiriting
 echo        (bepul: https://aistudio.google.com/apikey).
+echo     4. Claude bo'limi uchun: Anthropic API kalitini kiriting (ixtiyoriy).
+echo     Qo'shimcha dastur (Node.js, npm va hokazo) o'rnatish SHART EMAS.
 echo.
 echo   Jurnal: %GC_LOG%
 echo.

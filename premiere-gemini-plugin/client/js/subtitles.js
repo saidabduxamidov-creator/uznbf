@@ -24,20 +24,55 @@
   const STRONG = /[.!?…]["»”)]?$/;
   const MEDIUM = /[,;:—–-]["»”)]?$/;
 
+  /*
+   * Matn uslubi: harf ko'rinishi va tinish belgilari.
+   *  letterCase: "original" | "upper" | "lower" | "sentence"
+   *  punct: { comma, period, excl, colon, quotes, apos, dash, ellipsis } - true = saqlash
+   *  (eski format: punctuation: "remove" -> hammasi olib tashlanadi)
+   * So'z ichidagi apostroflar (oʻ, gʻ, maʼno, Pro'da) va sonlardagi nuqta/vergul (3.5, 1,000) doim saqlanadi.
+   */
+  const PUNCT = {
+    comma: /,/g,
+    period: /\./g,
+    excl: /[!?¡¿]/g,
+    colon: /[:;]/g,
+    quotes: /["“”„«»]/g,
+    apos: /['‘’ʻʼ`]/g,
+    dash: /\s[—–-]\s|[—–]/g,
+    ellipsis: /…|\.{3}/g,
+  };
+  const LETTER = "A-Za-z\\u00C0-\\u024F\\u0400-\\u04FF";
+  const ALL_KEEP = { comma: true, period: true, excl: true, colon: true, quotes: true, apos: true, dash: true, ellipsis: true };
+
   function styleText(text, options) {
-    let t = String(text);
-    const apostrophes = [];
-    if (options.punctuation === "remove") {
-      t = t.replace(/([A-Za-zА-Яа-яЎўҚқҒғҲҳ])['‘’ʻʼ`](?=[A-Za-zА-Яа-яЎўҚқҒғҲҳ])/g, (match, letter) => { apostrophes.push(match.slice(-1)); return letter + "\uE000"; });
-      t = t.replace(/[.,!?;:…"“”«»'‘’ʻʼ`()\[\]{}—–]/g, "").replace(/\uE000/g, () => apostrophes.shift());
+    let t = String(text == null ? "" : text);
+    const o = options || {};
+    const keep = Object.assign({}, ALL_KEEP, o.punctuation === "remove" ? Object.fromEntries(Object.keys(ALL_KEEP).map((k) => [k, false])) : {}, o.punct || {});
+
+    // Harf ko'rinishi - tinish belgilari hali joyida (gap boshini aniqlash uchun)
+    if (o.letterCase === "upper") t = t.toUpperCase();
+    else if (o.letterCase === "lower") t = t.toLowerCase();
+    else if (o.letterCase === "sentence") {
+      // Gap boshlari bosh harf bilan; qolgan harflar (ismlar) o'zgarmaydi
+      t = t.replace(new RegExp("(^|[.!?…]\\s+|\\n)([" + LETTER + "])", "g"), (m, p, ch) => p + ch.toUpperCase());
     }
-    if (options.letterCase === "upper") t = t.toUpperCase();
-    if (options.letterCase === "lower") t = t.toLowerCase();
-    return t;
+
+    // Himoya: so'z ichidagi apostroflar va sonlar ichidagi ajratgichlar
+    const saved = [];
+    const hide = (m) => { saved.push(m); return "\u0001" + (saved.length - 1) + "\u0002"; };
+    t = t.replace(new RegExp("[" + LETTER + "]['‘’ʻʼ`](?=[" + LETTER + "])", "g"), hide);
+    t = t.replace(/\d[.,](?=\d)/g, hide);
+    t = keep.ellipsis ? t.replace(PUNCT.ellipsis, hide) : t.replace(PUNCT.ellipsis, "");
+    for (const k of ["comma", "period", "excl", "colon", "quotes", "apos", "dash"]) {
+      if (!keep[k]) t = t.replace(PUNCT[k], k === "dash" ? " " : "");
+    }
+    t = t.replace(/\u0001(\d+)\u0002/g, (m, i) => saved[+i]);
+    return t.replace(/[ \t]+/g, " ").replace(/ ?\n ?/g, "\n").trim();
   }
+
   function cleanText(t) {
     return String(t == null ? "" : t)
-      .replace(/[​-‍﻿]/g, "")
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")
       .replace(/\s+/g, " ")
       .replace(/\s+([,.!?;:…])/g, "$1")
       .trim();
