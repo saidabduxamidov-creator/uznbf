@@ -11,7 +11,7 @@
  * Barcha vaqtlar - sequence (timeline) soniyalarida.
  */
 
-var GC_VERSION = "3.0.0";
+var GC_VERSION = "3.2.0";
 var GC_TICKS = 254016000000;
 
 /* ---------------- yordamchi funksiyalar ---------------- */
@@ -302,10 +302,10 @@ function gc_findScaleParam(clip) {
 function gc_setKey(param, sec, value) {
     var t = gc_time(sec);
     try {
-        param.addKeyframe(t);
+        param.addKey(t);
         param.setValueAtKey(t, value, true);
     } catch (e) {
-        param.addKeyframe(sec);
+        param.addKey(sec);
         param.setValueAtKey(sec, value, true);
     }
 }
@@ -354,12 +354,18 @@ function gc_applyZooms(zooms, speech) {
                 if (speakerPath && gc_itemPath(vi) === speakerPath) { target = vi; break; }
             }
             target = target || fallback;
-            if (!target || t3 > target.end.seconds) { skipped++; continue; }
+            if (!target) { skipped++; continue; }
+            t3 = Math.min(t3, target.end.seconds - gc_frameDuration(seq));
+            if (t3 - t0 < 0.3) { skipped++; continue; }
+            var localRamp = Math.min(ramp, (t3 - t0) / 3);
+            var speed = target.getSpeed ? Math.abs(target.getSpeed()) : 1;
+            if (!speed || (target.isSpeedReversed && target.isSpeedReversed())) { skipped++; continue; }
 
             var scale = gc_findScaleParam(target);
             if (!scale || !scale.areKeyframesSupported()) { skipped++; continue; }
             var key = target.nodeId || (target.start.seconds + ":" + target.end.seconds);
             if (bases[key] === undefined) {
+                if (scale.isTimeVarying()) { skipped++; continue; }
                 var b = 100;
                 try { b = Number(scale.getValue()) || 100; } catch (eV) {}
                 bases[key] = b;
@@ -368,11 +374,11 @@ function gc_applyZooms(zooms, speech) {
             var base = bases[key];
             var peak = base * pct / 100;
             // Keyframe vaqti - klipning media vaqtida
-            var m0 = target.inPoint.seconds + (t0 - target.start.seconds);
+            var m0 = target.inPoint.seconds + (t0 - target.start.seconds) * speed;
             gc_setKey(scale, m0, base);
-            gc_setKey(scale, m0 + ramp, peak);
-            gc_setKey(scale, m0 + ramp + hold, peak);
-            gc_setKey(scale, m0 + ramp + hold + ramp, base);
+            gc_setKey(scale, m0 + localRamp * speed, peak);
+            gc_setKey(scale, m0 + (t3 - t0 - localRamp) * speed, peak);
+            gc_setKey(scale, m0 + (t3 - t0) * speed, base);
             applied++;
         }
         return gc_ok({ applied: applied, skipped: skipped });
@@ -457,4 +463,34 @@ function gc_setPlayhead(sec) {
     } catch (e) {
         return gc_fail(e.toString());
     }
+}
+
+function gc_insertSound(filePath, trackIndex) {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return gc_fail("Faol sequence yo‘q.");
+        if (trackIndex < 0 || trackIndex >= seq.audioTracks.numTracks || trackIndex !== Math.floor(trackIndex)) return gc_fail("Bu audio trek mavjud emas. Premiere’da audio trek yarating.");
+        var track = seq.audioTracks[trackIndex];
+        if (gc_isLocked(track)) return gc_fail("Audio trek qulflangan.");
+        var file = new File(filePath);
+        if (!file.exists) return gc_fail("Audio fayl topilmadi.");
+        var found = {};
+        gc_findItemByPath(app.project.rootItem, gc_normPath(file.fsName), found);
+        if (!found.item) {
+            if (!app.project.importFiles([file.fsName], true, app.project.getInsertionBin(), false)) return gc_fail("Audio import qilinmadi.");
+            gc_findItemByPath(app.project.rootItem, gc_normPath(file.fsName), found);
+        }
+        if (!found.item) return gc_fail("Import qilingan audio topilmadi.");
+        var time = seq.getPlayerPosition();
+        var duration = found.item.getOutPoint(2).seconds - found.item.getInPoint(2).seconds;
+        if (!isFinite(duration) || duration <= 0) return gc_fail("Audio davomiyligi aniqlanmadi.");
+        for (var i = 0; i < track.clips.numItems; i++) {
+            var c = track.clips[i];
+            if (c.start.seconds < time.seconds + duration && c.end.seconds > time.seconds) return gc_fail("Bu joy band. Bo‘sh audio trekni tanlang.");
+        }
+        var before = track.clips.numItems;
+        track.overwriteClip(found.item, time.ticks);
+        if (track.clips.numItems <= before) return gc_fail("Effekt joylashtirilgani tasdiqlanmadi.");
+        return gc_ok({ name: found.item.name });
+    } catch (e) { return gc_fail(e.toString()); }
 }

@@ -24,6 +24,17 @@
   const STRONG = /[.!?…]["»”)]?$/;
   const MEDIUM = /[,;:—–-]["»”)]?$/;
 
+  function styleText(text, options) {
+    let t = String(text);
+    const apostrophes = [];
+    if (options.punctuation === "remove") {
+      t = t.replace(/([A-Za-zА-Яа-яЎўҚқҒғҲҳ])['‘’ʻʼ`](?=[A-Za-zА-Яа-яЎўҚқҒғҲҳ])/g, (match, letter) => { apostrophes.push(match.slice(-1)); return letter + "\uE000"; });
+      t = t.replace(/[.,!?;:…"“”«»'‘’ʻʼ`()\[\]{}—–]/g, "").replace(/\uE000/g, () => apostrophes.shift());
+    }
+    if (options.letterCase === "upper") t = t.toUpperCase();
+    if (options.letterCase === "lower") t = t.toLowerCase();
+    return t;
+  }
   function cleanText(t) {
     return String(t == null ? "" : t)
       .replace(/[​-‍﻿]/g, "")
@@ -124,7 +135,7 @@
 
     // 1) tozalash va saralash
     let segs = (raw || [])
-      .map((s) => ({ start: toNumber(s.start), end: toNumber(s.end), text: cleanText(s.text) }))
+      .map((s) => ({ start: toNumber(s.start), end: toNumber(s.end), text: cleanText(styleText(s.text, o)) }))
       .filter((s) => s.text && isFinite(s.start) && isFinite(s.end))
       .map((s) => (s.end < s.start ? { start: s.end, end: s.start, text: s.text } : s))
       .filter((s) => s.end > lo && s.start < hi)
@@ -195,10 +206,10 @@
       c.lines = wrapLines(c.text, o.maxChars, o.maxLines);
     }
 
-    return cues.map((c, i) => ({
+    return cues.filter(c => c.start < hi && Math.min(c.end, hi) > c.start).map((c, i) => ({
       index: i + 1,
       start: round3(c.start),
-      end: round3(Math.max(c.end, c.start + 0.1)),
+      end: round3(Math.min(hi, Math.max(c.end, c.start + 0.001))),
       text: c.lines.join("\n"),
     }));
   }
@@ -232,7 +243,7 @@
       .join("\r\n");
   }
 
-  const api = { DEFAULTS, buildCues, splitText, wrapLines, toSrt, formatSrtTime, formatClock, normalizeUzbek, cleanText, toNumber };
+  const api = { styleText, DEFAULTS, buildCues, splitText, wrapLines, toSrt, formatSrtTime, formatClock, normalizeUzbek, cleanText, toNumber };
   root.GCSubs = api;
   if (typeof module === "object" && module && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

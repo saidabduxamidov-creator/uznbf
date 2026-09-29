@@ -39,7 +39,7 @@
   function loadSettings() {
     const def = { apiKey: "", model: "gemini-2.5-flash", customModel: "", uzStyle: "typographic",
       srcLang: "auto", outLang: "same", maxChars: 42, maxLines: 2, range: "all", glossary: "",
-      pauses: true, pause: 0.8, retakes: true, zoom: false, zoomPower: 115, presetPath: "" };
+      letterCase: "original", punctuation: "keep", autoCaption: false, pauses: true, pause: 0.8, retakes: true, zoom: false, zoomPower: 115, presetPath: "" };
     try { return Object.assign(def, JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}")); } catch (e) { return def; }
   }
   function saveSettings() {
@@ -123,6 +123,7 @@
 
   function setBusy(on) {
     state.busy = on;
+    const flow = document.getElementById("flowGenerate"); if (flow) flow.disabled = on;
     ["btnSubs", "btnEdit", "btnApplySubs", "btnApplyEdit", "refreshSeq"].forEach((id) => { $(id).disabled = on; });
     document.querySelectorAll(".chip").forEach((c) => { c.disabled = on; });
   }
@@ -439,7 +440,7 @@
     const s = state.settings;
     const spoken = s.srcLang === "auto" ? String(state.detectedLang || "") : s.srcLang;
     const uz = s.outLang === "uz" || (s.outLang === "same" && /^uz(?!-cyrl)/i.test(spoken));
-    return { maxChars: s.maxChars, maxLines: s.maxLines, uzbekStyle: uz ? s.uzStyle : null };
+    return { maxChars: s.maxChars, maxLines: s.maxLines, letterCase: s.letterCase, punctuation: s.punctuation, uzbekStyle: uz ? s.uzStyle : null };
   }
 
   function rebuildCues() {
@@ -447,7 +448,8 @@
     if (!c || !c.transcript) return;
     const speech = c.transcript.filter((x) => x.type === "speech");
     const silences = c.vad.silences.map((x) => ({ start: x.start + c.offset, end: x.end + c.offset }));
-    state.cues = GCSubs.buildCues(speech, Object.assign(subsOptions(), { silences }), { start: c.offset, end: c.end });
+    state.cues = GCSubs.buildCues(speech, Object.assign(subsOptions(), { silences, letterCase: "original", punctuation: "keep" }), { start: c.offset, end: c.end });
+    state.cues.forEach(c => { c.styleSource = c.text; c.text = GCSubs.styleText(c.text, state.settings); });
     renderCues();
   }
 
@@ -480,7 +482,7 @@
         badge.hidden = !warns.length;
         row.classList.toggle("warn", warns.length > 0);
       };
-      ta.addEventListener("input", () => { state.cues[i].text = ta.value; autoSize(ta); check(); });
+      ta.addEventListener("input", () => { state.cues[i].text = ta.value; state.cues[i].styleSource = ta.value; autoSize(ta); check(); });
       row.append(time, ta, badge);
       frag.appendChild(row);
       check();
@@ -497,7 +499,7 @@
     const s = state.settings;
     const cues = state.cues
       .map((c) => {
-        const lines = c.text.split("\n").map(GCSubs.cleanText).filter(Boolean);
+        const lines = GCSubs.styleText(c.text, s).split("\n").map(GCSubs.cleanText).filter(Boolean);
         const fits = lines.length <= s.maxLines && lines.every((l) => l.length <= s.maxChars);
         const text = fits ? lines.join("\n") : GCSubs.wrapLines(lines.join(" "), s.maxChars, s.maxLines).join("\n");
         return { start: c.start, end: c.end, text };
@@ -528,6 +530,13 @@
       await transcribe(cache, prog, token);
       rebuildCues();
       if (!state.cues.length) throw new Error("Nutq topilmadi.");
+      if (state.settings.autoCaption) {
+        const file = pathMod.join(outputDir(), srtBaseName());
+        fs.writeFileSync(file, finalSrt(), "utf8");
+        await GCHost.call("gc_importSrt", [file], 120000);
+        toast("Subtitrlar timeline’ga qo‘shildi.");
+        return;
+      }
       toast(`${state.cues.length} ta subtitr tayyor. Tekshirib, "Timeline'ga qo'shish" ni bosing.`);
     });
   }
@@ -702,7 +711,7 @@
       if (!zooms.length && !cuts.length) throw new Error("Hech narsa belgilanmagan.");
       const report = [];
       // Avval zoom (keyframe'lar klip ichida qoladi), keyin kesish
-      if (zooms.length) report.push((await GCHost.call("gc_applyZooms", [zooms, state.tracks], 120000)).applied + " ta zoom");
+      if (zooms.length) { const z = await GCHost.call("gc_applyZooms", [zooms, state.tracks], 120000); report.push(z.applied + " ta zoom, " + z.skipped + " ta o‘tkazib yuborildi"); if (!z.applied && !cuts.length) throw new Error("Zoom qo‘llanmadi: video trek qulfini, klip davomiyligini va mavjud Scale animatsiyasini tekshiring."); }
       if (cuts.length) {
         const r = await GCHost.call("gc_applyCuts", [cuts, state.tracks], 600000);
         report.push(`${r.applied} ta kesish (${(r.seconds || 0).toFixed(1)}s)`);
@@ -762,7 +771,8 @@
     tabs.forEach((t, i) => {
       const on = t.dataset.tab === name;
       t.classList.toggle("active", on);
-      if (on) document.querySelector(".tab-glider").style.transform = `translateX(${i * 100}%)`;
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
     });
     document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + name));
   }
@@ -794,6 +804,9 @@
   function init() {
     document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
 
+    bindInput("letterCase", "letterCase", { onChange: () => { state.cues.forEach(c => { if (c.styleSource === undefined) c.styleSource = c.text; c.text = GCSubs.styleText(c.styleSource, state.settings); }); renderCues(); } });
+    bindInput("punctuation", "punctuation", { onChange: () => { state.cues.forEach(c => { if (c.styleSource === undefined) c.styleSource = c.text; c.text = GCSubs.styleText(c.styleSource, state.settings); }); renderCues(); } });
+    bindInput("autoCaption", "autoCaption");
     bindInput("srcLang", "srcLang");
     bindInput("outLang", "outLang");
     bindInput("glossary", "glossary");
@@ -857,5 +870,18 @@
       .catch((e) => { setPill("pillHost", false); toast("Premiere bilan aloqa yo'q: " + e.message, "err"); });
   }
 
+  window.GCApplication = {
+    isBusy: () => state.busy,
+    lockFlow: (on) => { setBusy(on); }
+  };
   init();
+  if (window.GCFlow) window.GCFlow.init();
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('keydown', e => {
+    if (!['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) return;
+    e.preventDefault();
+    const tabs = Array.from(document.querySelectorAll('.tab'));
+    const i = tabs.indexOf(t);
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[next].click(); tabs[next].focus();
+  }));
 })();

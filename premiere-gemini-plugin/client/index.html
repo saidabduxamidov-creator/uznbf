@@ -5,9 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>GeminiCut</title>
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/studio.css" />
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 10v4m4-8v12m5-16v20m5-16v12m4-8v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8"/></symbol>
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2c.5 4.8 2.6 7.8 7.6 9.4.4.1.4.7 0 .8C14.6 13.8 12.5 16.9 12 22c-.5-5.1-2.6-8.2-7.6-9.8-.4-.1-.4-.7 0-.8C9.4 9.8 11.5 6.8 12 2z" fill="currentColor"/></symbol>
     <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" stroke="currentColor" stroke-width="1.8"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -28,7 +31,7 @@
         <div class="logo"><svg><use href="#i-spark"/></svg></div>
         <div>
           <div class="brand-name">GeminiCut</div>
-          <div class="brand-sub">AI subtitr &amp; montaj</div>
+          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">3.2</span></div>
         </div>
       </div>
       <div class="status">
@@ -52,16 +55,18 @@
       <div class="chips" id="trackChips"></div>
     </section>
 
-    <nav class="tabs" role="tablist">
-      <button class="tab active" data-tab="subs" role="tab"><svg><use href="#i-cc"/></svg>Subtitr</button>
-      <button class="tab" data-tab="edit" role="tab"><svg><use href="#i-cut"/></svg>Montaj</button>
-      <button class="tab" data-tab="settings" role="tab"><svg><use href="#i-gear"/></svg>Sozlamalar</button>
-      <span class="tab-glider"></span>
+    <nav class="tabs" role="tablist" aria-label="GeminiCut bo‘limlari">
+      <button class="tab active" data-tab="subs" role="tab" aria-selected="true"><svg><use href="#i-cc"/></svg><span>Subtitr</span></button>
+      <button class="tab" data-tab="edit" role="tab" aria-selected="false"><svg><use href="#i-cut"/></svg><span>Montaj</span></button>
+      <button class="tab" data-tab="sounds" role="tab" aria-selected="false"><svg><use href="#i-wave"/></svg><span>Effektlar</span></button>
+      <button class="tab flow-tab" data-tab="flow" role="tab" aria-selected="false"><svg><use href="#i-spark"/></svg><span>Google Flow</span><b class="new-badge">YANGI</b></button>
+      <button class="tab" data-tab="notes" role="tab" aria-selected="false"><svg><use href="#i-note"/></svg><span>Bloknot</span></button>
+      <button class="tab" data-tab="settings" role="tab" aria-selected="false"><svg><use href="#i-gear"/></svg><span>Sozlamalar</span></button>
     </nav>
 
     <main class="views">
       <!-- ============ SUBTITR ============ -->
-      <section class="view active" id="view-subs">
+      <section class="view active" id="view-subs"><div class="section-heading"><div><div class="eyebrow">NUTQDAN MATNGA</div><h1>Subtitrlar</h1><p>Aniq matn, tartibli qatorlar va timeline bilan uyg‘un vaqt.</p></div></div>
         <div class="card">
           <div class="grid2">
             <label class="field">
@@ -115,7 +120,12 @@
             <input id="glossary" placeholder="Masalan: Premiere Pro, Toshkent, Dilshod Rahimov" spellcheck="false" />
           </label>
 
-          <button class="btn primary big" id="btnSubs"><svg><use href="#i-spark"/></svg>Subtitr yaratish</button>
+          <div class="grid2">
+<label class="field"><span>Harf ko‘rinishi</span><select id="letterCase"><option value="original">Asl holati</option><option value="upper">KATTA HARFLAR</option><option value="lower">kichik harflar</option></select></label>
+<label class="field"><span>Tinish belgilari</span><select id="punctuation"><option value="keep">Saqlash: , . : “ ”</option><option value="remove">Olib tashlash</option></select></label></div>
+<p>O‘zbekcha o‘, g‘ va so‘z ichidagi tutuq belgisi saqlanadi.</p>
+<label class="switch-row"><input type="checkbox" id="autoCaption" /><i class="switch"></i><em>Tayyor subtitrni timeline’ga avtomatik qo‘shish</em></label>
+<button class="btn primary big" id="btnSubs"><svg><use href="#i-spark"/></svg>Subtitr yaratish</button>
         </div>
 
         <div class="progress card" id="progSubs" hidden>
@@ -147,8 +157,17 @@
         </div>
       </section>
 
-      <!-- ============ MONTAJ ============ -->
-      <section class="view" id="view-edit">
+      <section class="view" id="view-sounds"><div class="section-heading"><div><div class="eyebrow">SHAXSIY KUTUBXONA</div><h1>Sound effektlar</h1><p>Effektlarni tartiblang, tinglang va sahnaga qo‘shing.</p></div></div><div class="card">
+<div class="grid2"><input id="soundFolderName" placeholder="Yangi papka nomi" /><button class="btn" id="newSoundFolder">+ Papka yaratish</button></div>
+<div class="sound-layout"><div id="soundFolders"></div><div><input id="soundSearch" placeholder="Effekt qidirish…" /><button class="btn primary" id="uploadSounds">Kompyuterdan yuklash</button><div id="soundList"></div></div></div>
+<p id="soundStatus" role="status"></p><audio id="soundPlayer" controls style="width:100%"></audio>
+<label class="field"><span>Timeline audio treki (A1 = 1)</span><input id="soundTrack" type="number" min="1" value="1" /></label>
+<p>Effekt playhead joyiga qo‘shiladi. Band joyga yozilmaydi.</p></div></section>
+<section class="view" id="view-notes"><div class="section-heading"><div><div class="eyebrow">IJODIY MAYDON</div><h1>Bloknot</h1><p>Senariy, g‘oya va muhim qaydlaringiz shu yerda.</p></div></div><div class="card">
+<textarea id="notesText" placeholder="Senariy, gaplar yoki kerakli ma’lumotlarni shu yerga yozing…" spellcheck="true"></textarea>
+<p id="notesStatus" role="status"></p><button id="saveNotes" class="btn">TXT faylga saqlash</button><button id="loadNotes" class="btn">TXT ochish</button></div></section>
+<!-- ============ MONTAJ ============ -->
+      <section class="view" id="view-edit"><div class="section-heading"><div><div class="eyebrow">TEZKOR MONTAJ</div><h1>Montaj yordamchisi</h1><p>Pauzalar, takrorlar va yengil zoom — bir joyda.</p></div></div>
         <div class="card">
           <label class="switch-row block"><input type="checkbox" id="optPauses" checked /><i class="switch"></i>
             <em><b>Pauzalarni kesish</b><small>Waveform bo'yicha, kadrgacha aniq · internet kerak emas</small></em></label>
@@ -204,8 +223,41 @@
         </div>
       </section>
 
+      
+      <section class="view" id="view-flow" role="tabpanel">
+        <div class="section-heading"><div><div class="eyebrow">KADRDAN VIDEOGA</div><h1>Google Flow</h1><p>Timeline’dagi bir kadrga harakat bering.</p></div><span class="version-chip">Veo / Flow</span></div>
+        <div class="flow-hero card"><div class="flow-visual"><svg><use href="#i-film"/></svg><span>Kadr</span><i>→</i><svg><use href="#i-spark"/></svg><span>Harakat</span><i>→</i><svg><use href="#i-film"/></svg><span>Timeline</span></div><p>Birinchi kadr va sizning promptingiz Google Flow’ga yuboriladi.</p></div>
+        <details class="card account-card" open><summary><span class="step-number">01</span> Google Flow Akkauntini Ulash <span id="flowAccountState" class="status-label">Ulanmagan</span></summary>
+          <div class="detail-body">
+            <div class="grid2"><label class="field"><span>Ulanish usuli</span><select id="flowMode" data-flow-idle><option value="profile">Brauzer profili</option><option value="cookies">Session cookies</option></select></label><label class="field"><span>Brauzer</span><select id="flowChannel" data-flow-idle><option value="chrome">Google Chrome</option><option value="msedge">Microsoft Edge</option></select></label></div>
+            <label class="field" id="flowProfileWrap"><span>User Data Path</span><input id="flowProfile" data-flow-idle placeholder="Bo‘sh qoldiring — alohida Flow profili yaratiladi" spellcheck="false"/><small>Alohida Flow profilidan foydalaning. Ochiq turgan kundalik Chrome profili mos kelmaydi.</small></label>
+            <label class="field" id="flowCookiesWrap" hidden><span>Google session cookies · JSON</span><textarea id="flowCookies" data-flow-idle rows="4" autocomplete="off" spellcheck="false" placeholder='[{"name":"…","value":"…","domain":".google.com","path":"/"}]'></textarea><small>Windows akkauntingizga bog‘langan holda shifrlanadi. Saqlangach bu maydon tozalanadi.</small></label>
+            <label class="field"><span>Flow loyiha havolasi</span><input id="flowProject" data-flow-idle value="https://labs.google/fx/tools/flow" spellcheck="false"/></label>
+            <div class="button-row"><button class="btn" id="flowSave" data-flow-idle>Ulanishni saqlash</button><button class="btn" id="flowOpen" data-flow-idle>Brauzerni ochish ↗</button></div>
+            <div class="button-row compact"><button class="link-btn" id="flowCheck" data-flow-idle>Ulanishni tekshirish</button><button class="link-btn muted" id="flowDisconnect" data-flow-idle>Ulanishni unutish</button></div>
+          </div>
+        </details>
+        <div class="card"><div class="card-heading"><span class="step-number">02</span><h2>Harakatni tasvirlang</h2></div>
+          <label class="field"><span>Prompt</span><textarea id="flowPrompt" data-flow-idle rows="4" maxlength="8000" placeholder="Masalan: Kamera sekin yaqinlashsin, odam yengil bosh irg‘asin."></textarea></label>
+          <details class="prompt-info"><summary>Yuz, kiyim va fonni saqlash ko‘rsatmasi</summary><p id="flowSystemPrompt"></p><small>Bu ko‘rsatma natijaga yo‘nalish beradi. Yuz yoki logotip mutlaqo o‘zgarmasligi kafolatlanmaydi.</small></details>
+          <div class="divider"></div>
+          <label class="field"><span>Timeline’dagi joy</span><select id="flowPosition" data-flow-idle><option value="captured">Kadr olingan joyga</option><option value="current">Import paytidagi playhead joyiga</option></select></label>
+          <label class="switch-row"><input type="checkbox" id="flowAutoImport" checked data-flow-idle/><i class="switch"></i><em><b>Timeline’ga avtomatik qo‘shish</b><small>Yangi video trek · mavjud kliplar saqlanadi</small></em></label>
+          <p class="capture-info" id="flowCaptureInfo">Playhead’ni kerakli kadr ustiga olib keling.</p>
+          <button class="btn primary big" id="flowGenerate" data-flow-idle><svg><use href="#i-spark"/></svg>Generatsiya</button>
+          <p class="note">Flow akkauntingizdagi kredit sarflanishi mumkin. Ish davomida ochilgan Flow oynasida boshqa generatsiya boshlamang.</p>
+        </div>
+        <div class="card flow-progress"><div class="card-heading"><h2>Jarayon</h2><button class="link-btn danger" id="flowCancel" disabled>Bekor qilish</button></div>
+          <ol class="steps" id="flowSteps"><li>Kadr</li><li>Yuklash</li><li>Generatsiya</li><li>MP4</li><li>Timeline</li></ol>
+          <p id="flowStatus" role="status" aria-live="polite">Akkauntingizni ulang va harakatni yozing.</p>
+          <div id="flowResult" hidden><div class="result-ready">✓ Video tayyor</div><p id="flowResultPath"></p><button class="btn primary" id="flowImport" data-flow-idle>Timeline’ga qo‘shish</button></div>
+          <div class="button-row compact"><button class="link-btn" id="flowManual" data-flow-idle>Tayyor MP4 ni tanlash</button><button class="link-btn muted" id="flowDismiss" data-flow-idle>Natijani yopish</button></div>
+        </div>
+        <details class="card"><summary>Yordamchi dastur va moslashtirish</summary><div class="detail-body"><p>Birinchi marta: Node.js 20+ o‘rnating va paketdagi <b>Flow-Runtime-Setup.bat</b> faylini ishga tushiring.</p><button class="btn" id="flowRuntime" data-flow-idle>Yordamchi fayllar papkasi</button><label class="field"><span>Node.js yo‘li</span><input id="flowNode" value="node" spellcheck="false" data-flow-idle/></label><p class="note">Flow oynasini ingliz tilida oching. Google interfeysi o‘zgarsa, avtomatlashtirish moslashtirilishi kerak.</p><label class="field"><span>Interfeys adapteri</span><span id="flowAdapterPath" class="file-path">Flow ochilganda ko‘rsatiladi</span></label></div></details>
+      </section>
+
       <!-- ============ SOZLAMALAR ============ -->
-      <section class="view" id="view-settings">
+      <section class="view" id="view-settings"><div class="section-heading"><div><div class="eyebrow">ISH MUHITI</div><h1>Sozlamalar</h1><p>Gemini, audio eksporti va til sozlamalari.</p></div></div>
         <div class="card">
           <div class="field">
             <span>Gemini API kalit</span>
@@ -258,7 +310,7 @@
           </details>
           <button class="btn ghost" id="btnClearCache">Tahlil keshini tozalash</button>
         </div>
-        <p class="about">GeminiCut <span id="ver">3.0.0</span> &middot; Premiere Pro 2022-2025</p>
+        <p class="about">GeminiCut <span id="ver">3.2.0</span> &middot; Premiere Pro 2022-2025</p>
       </section>
     </main>
 
@@ -269,6 +321,8 @@
   <script src="js/subtitles.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/gemini.js"></script>
+  <script src="js/library.js"></script>
+  <script src="js/flow.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

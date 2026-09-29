@@ -1,3 +1,9 @@
+# GeminiCut 3.2
+
+Google Flow va yangilangan dizayn bo‘yicha to‘liq qo‘llanma: [flow/README.md](flow/README.md).
+
+Quyida avvalgi subtitr/montaj bo‘limlarining qo‘llanmasi saqlangan.
+
 # GeminiCut 3.0 — Premiere Pro uchun AI subtitr va montaj paneli
 
 Premiere Pro 2022, 2023, 2024 va **2025** (Windows) uchun.
