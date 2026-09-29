@@ -132,7 +132,17 @@ echo     Qo'shimcha dastur (Node.js, npm va hokazo) o'rnatish SHART EMAS.
 echo.
 echo   Jurnal: %GC_LOG%
 echo.
-if not defined GC_SILENT pause
+if defined GC_SILENT exit /b 0
+call :findPremiere
+if not defined GC_PPRO goto :installDone
+choice /C YN /N /M "  Premiere Pro hozir ochilsinmi? [Y/N]: "
+if errorlevel 2 goto :installDone
+echo   Premiere Pro ochilmoqda: %GC_PPRO%
+start "" "%GC_PPRO%"
+echo   Premiere ochilgach: Window ^> Extensions ^> GeminiCut - AI Subtitr va Montaj
+echo.
+:installDone
+pause
 exit /b 0
 
 rem --------------------------------------------------------------------------
@@ -179,6 +189,14 @@ echo     GeminiCut %GC_VERSION%  -  AI subtitr va montaj
 echo     Adobe Premiere Pro 2022 / 2023 / 2024 / 2025
 echo   ==========================================================
 echo.
+exit /b 0
+
+:findPremiere
+rem Eng yangi o'rnatilgan Premiere Pro (masalan 2025) - papkalar alifbo tartibida, oxirgisi eng yangisi
+set "GC_PPRO="
+for /d %%D in ("%ProgramFiles%\Adobe\Adobe Premiere Pro*") do (
+    if exist "%%~fD\Adobe Premiere Pro.exe" set "GC_PPRO=%%~fD\Adobe Premiere Pro.exe"
+)
 exit /b 0
 
 :listPremiere
