@@ -63,3 +63,39 @@ test('CDP: kadr yuklash, prompt yozish, Generate, yuklab olishni ushlash', { ski
     cdp.close();
   }
 });
+
+test('CDP: akkaunt ulanishini aniqlash (Google cookie) va sahifani yo\'naltirish', { skip: !CHROME && 'Chromium topilmadi' }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gc-login-'));
+  const a = path.join(dir, 'a.html'), b = path.join(dir, 'b.html');
+  fs.writeFileSync(a, '<title>login</title>'); fs.writeFileSync(b, '<title>flow</title>');
+  process.env.GEMINICUT_BROWSER = CHROME;
+  const info = await C.launch({ profile: path.join(dir, 'p'), url: 'file://' + a, extraArgs: ['--headless=new', '--no-sandbox'] });
+  const cdp = await C.CDP.connect(info.ws);
+  const loggedIn = async () => (await cdp.send('Storage.getCookies', {})).cookies
+    .some((c) => /(^|\.)google\.com$/.test(c.domain) && /^(SID|__Secure-1PSID|__Secure-3PSID)$/.test(c.name));
+  try {
+    assert.strictEqual(await loggedIn(), false, 'yangi profil - kirilmagan');
+    const t = (await cdp.send('Target.getTargets')).targetInfos.find((x) => x.type === 'page');
+    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: t.targetId, flatten: true });
+    // foydalanuvchi Google'ga kirdi (Google cookie o'rnatdi)
+    await cdp.send('Storage.setCookies', { cookies: [{ name: '__Secure-1PSID', value: 'x', domain: '.google.com', path: '/', secure: true }] });
+    assert.strictEqual(await loggedIn(), true, 'kirish aniqlandi');
+    await cdp.send('Page.navigate', { url: 'file://' + b }, sessionId);
+    await new Promise((r) => setTimeout(r, 500));
+    const title = (await cdp.send('Runtime.evaluate', { expression: 'document.title', returnByValue: true }, sessionId)).result.value;
+    assert.strictEqual(title, 'flow');
+  } finally {
+    try { await cdp.send('Browser.close'); } catch (e) { /* yopildi */ }
+    cdp.close();
+  }
+});
+
+test('Flow manzillari: flow.google.com va yo\'naltirilgan labs.google sahifasi taniladi', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'client', 'js', 'flow.js'), 'utf8');
+  const FLOW_URL = /const FLOW_URL = "([^"]+)"/.exec(src)[1];
+  const FLOW_PAGE = eval(/const FLOW_PAGE = (\/.*\/i);/.exec(src)[1]);
+  assert.strictEqual(FLOW_URL, 'https://flow.google.com');
+  assert.ok(FLOW_PAGE.test('https://flow.google.com/'));
+  assert.ok(FLOW_PAGE.test('https://labs.google/fx/tools/flow/project/abc'));
+  assert.ok(!FLOW_PAGE.test('https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fflow.google.com'));
+});

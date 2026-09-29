@@ -48,9 +48,11 @@ Timeline'da klipni tanlang va oddiy so'z bilan yozing, masalan: *"yuziga sekin z
 ### Video AI (kadrdan video)
 - **Veo · avtomatik** — rasmiy Gemini API orqali: kadr + prompt → MP4 → yangi video trek.
   Gemini kalitingiz ishlatiladi (Veo pullik, AI Studio'da billing kerak).
-- **Google Flow · brauzer** — o'zingizning Flow akkauntingiz/kreditlaringiz:
-  1. **Flow'ni ochish / Google'ga kirish** — alohida GeminiCut brauzer oynasi ochiladi;
-     Google'ga bir marta kirasiz, profil eslab qoladi (asosiy Chrome profilingizga tegilmaydi).
+- **Google Flow · brauzer** (<https://flow.google.com>) — o'zingizning Flow akkauntingiz/kreditlaringiz:
+  1. **flow.google.com ni ochish / akkauntni ulash** — alohida GeminiCut brauzer oynasida
+     flow.google.com ochiladi. Kirilmagan bo'lsa Google kirish sahifasi chiqadi: bir marta kirasiz,
+     plagin buni o'zi sezadi va Flow'ga qaytaradi. Profil eslab qoladi (asosiy Chrome profilingizga
+     tegilmaydi, parol plaginga kiritilmaydi).
   2. Flow'da "Frames to Video" ni tanlang, playhead'ni kadrga qo'ying, promptni yozing, **Flow'ga yuborish**.
   3. Plagin kadrni yuklaydi va promptni yozadi; Generate'ni siz bosasiz (yoki avtomatik bosish yoqiladi).
   4. Video tayyor bo'lgach Flow'da **Download** — plagin MP4'ni ushlab timeline'ga qo'yadi.

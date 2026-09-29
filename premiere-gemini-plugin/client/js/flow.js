@@ -15,7 +15,10 @@
 
   const OUT = path.join(os.homedir(), "Documents", "GeminiCut", "AI Video");
   const LS = "geminicut.flow.v4";
-  const FLOW_URL = "https://labs.google/fx/tools/flow";
+  const FLOW_URL = "https://flow.google.com";
+  // flow.google.com ichkarida labs.google/fx/... ga yo'naltirishi mumkin - ikkalasi ham Flow sahifasi
+  const FLOW_PAGE = /(^https:\/\/flow\.google\.com)|labs\.google\/fx/i;
+  const LOGIN_URL = "https://accounts.google.com/ServiceLogin?continue=" + encodeURIComponent(FLOW_URL);
 
   let busy = false, token = null, last = null, browser = null;
 
@@ -163,7 +166,8 @@ CRITICAL RESTRICTIONS:
 
   async function flowPage(b) {
     const { targetInfos } = await b.cdp.send("Target.getTargets");
-    let t = targetInfos.find((x) => x.type === "page" && /labs\.google/.test(x.url));
+    let t = targetInfos.find((x) => x.type === "page" && FLOW_PAGE.test(x.url))
+      || targetInfos.find((x) => x.type === "page" && /accounts\.google\.com/.test(x.url));
     if (!t) { const { targetId } = await b.cdp.send("Target.createTarget", { url: FLOW_URL }); t = { targetId }; }
     await b.cdp.send("Target.activateTarget", { targetId: t.targetId });
     const { sessionId } = await b.cdp.send("Target.attachToTarget", { targetId: t.targetId, flatten: true });
@@ -182,14 +186,37 @@ CRITICAL RESTRICTIONS:
     el.className = "status-label " + (ok === true ? "ok" : ok === false ? "warn" : "");
   }
 
+  /*
+   * flow.google.com ni ochadi va akkauntni ulaydi: kirilmagan bo'lsa Google kirish sahifasi
+   * ochiladi, foydalanuvchi kirishi kutiladi (10 daqiqagacha), so'ng Flow'ga qaytiladi.
+   * Parol plaginga kiritilmaydi - faqat Google'ning o'z oynasida.
+   */
   async function openFlow() {
-    message("Brauzer ochilmoqda…");
+    message("flow.google.com ochilmoqda…");
     const b = await connectBrowser();
-    await flowPage(b);
-    const ok = await isLoggedIn(b);
-    accountState(ok);
-    message(ok ? "Flow ochildi. Loyihani oching va “Frames to Video” rejimini tanlang." : "Ochilgan oynada Google akkauntingizga kiring (bir marta). Profil eslab qoladi.");
+    const sid = await flowPage(b);
+    if (await isLoggedIn(b)) {
+      accountState(true);
+      await b.cdp.send("Page.navigate", { url: FLOW_URL }, sid).catch(() => {});
+      message("✓ Akkaunt ulangan. Flow'da loyihani oching va “Frames to Video” rejimini tanlang.");
+      return;
+    }
+    accountState(false);
+    await b.cdp.send("Page.navigate", { url: LOGIN_URL }, sid);
+    message("Ochilgan oynada Google akkauntingizga kiring (bir marta) - plagin kutyapti…");
+    const t0 = Date.now();
+    while (Date.now() - t0 < 10 * 60000) {
+      await window.GCGemini.sleep(2500, token);
+      if (await isLoggedIn(b)) {
+        accountState(true);
+        await b.cdp.send("Page.navigate", { url: FLOW_URL }, sid).catch(() => {});
+        message("✓ Akkaunt ulandi, flow.google.com ochildi. Profil eslab qoladi - keyingi safar qayta kirish shart emas.");
+        return;
+      }
+    }
+    throw new Error("10 daqiqa ichida Google'ga kirilmadi. “flow.google.com ni ochish” ni qayta bosing.");
   }
+
 
   const DEEP = `(function(sel){const out=[];const walk=(r)=>{r.querySelectorAll(sel).forEach(e=>out.push(e));r.querySelectorAll('*').forEach(e=>{if(e.shadowRoot)walk(e.shadowRoot)})};walk(document);return out;})`;
 
@@ -205,7 +232,12 @@ CRITICAL RESTRICTIONS:
     steps(1); message("Flow brauzeri ochilmoqda…");
     const b = await connectBrowser();
     const sid = await flowPage(b);
-    if (!(await isLoggedIn(b))) { accountState(false); throw new Error("Avval ochilgan oynada Google akkauntingizga kiring, so'ng qayta bosing."); }
+    if (!(await isLoggedIn(b))) { accountState(false); throw new Error("Avval “flow.google.com ni ochish / akkauntni ulash” tugmasi orqali Google'ga kiring."); }
+    const here = (await b.cdp.send("Runtime.evaluate", { expression: "location.href", returnByValue: true }, sid)).result.value || "";
+    if (!FLOW_PAGE.test(here)) {
+      await b.cdp.send("Page.navigate", { url: FLOW_URL }, sid);
+      await new Promise((r) => setTimeout(r, 4000));
+    }
     accountState(true);
 
     // 1) kadrni yuklash: fayl maydoni paydo bo'lishini kutamiz
