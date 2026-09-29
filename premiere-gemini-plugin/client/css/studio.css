@@ -204,3 +204,7 @@ button:focus-visible,summary:focus-visible {outline:2px solid #a9bbff;outline-of
 }
 @media(prefers-reduced-motion:reduce) {*,*::before,*::after {animation:none!important;transition:none!important;}}
 .ai-writer .input-group input {font-family:var(--font);font-size:12.5px;}
+
+/* Faqat bitta dastur uchun elementlar: data-host="ppro" (Premiere) / "resolve" (DaVinci Resolve) */
+body:not(.resolve) [data-host="resolve"] {display:none !important;}
+body.resolve [data-host="ppro"] {display:none !important;}

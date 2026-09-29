@@ -201,6 +201,7 @@
             </div>
           </div>
           <p class="note">Punch-in, Silkinish va Qiyshayish playhead joyidan boshlanadi. Hammasi Ctrl+Z bilan qaytariladi.</p>
+          <p class="note" data-host="resolve">Resolve'da harakat klipning Fusion kompozitsiyasiga (GCTransform) yoziladi va playhead ostidagi klipga qo'llanadi.</p>
         </div>
 
         <div class="card">
@@ -234,7 +235,8 @@
         <div class="results" id="editResults" hidden>
           <div class="results-head"><div><div class="results-title" id="editTitle">Reja</div><div class="results-sub" id="editSub"></div></div></div>
           <div class="cue-list" id="planList"></div>
-          <p class="note">Video va tanlangan nutq treklari birga kesiladi, musiqa treki tegilmaydi. Hammasi <b>Ctrl+Z</b> bilan bekor qilinadi.</p>
+          <p class="note" data-host="ppro">Video va tanlangan nutq treklari birga kesiladi, musiqa treki tegilmaydi. Hammasi <b>Ctrl+Z</b> bilan bekor qilinadi.</p>
+          <p class="note" data-host="resolve">Resolve'da kesishlar pauzalarsiz <b>yangi timeline</b> yaratadi ("… (GeminiCut)") - asl timeline o'zgarmaydi. Musiqani yangi timeline'ga o'zingiz qo'shasiz.</p>
           <div class="sticky-actions"><button class="btn primary" id="btnApplyEdit"><svg><use href="#i-check"/></svg>Belgilanganlarni qo'llash</button></div>
         </div>
       </section>
@@ -413,7 +415,7 @@
             </select>
           </label>
           <label class="field" id="customModelWrap" hidden><span>Model nomi</span><input id="customModel" placeholder="gemini-..." spellcheck="false" /></label>
-          <div class="field">
+          <div class="field" data-host="ppro">
             <span>Audio eksport preseti (WAV)</span>
             <div class="input-group">
               <input id="presetPath" placeholder="Avtomatik topiladi" readonly spellcheck="false" />
@@ -426,7 +428,7 @@
             <span>O'zbekcha apostrof uslubi</span>
             <select id="uzStyle"><option value="typographic">Tipografik: oʻ, gʻ, maʼno</option><option value="simple">Oddiy: o', g', ma'no</option></select>
           </label>
-          <label class="field">
+          <label class="field" data-host="ppro">
             <span>Keyframe vaqti <em class="opt">zoom ko'rinmasa almashtiring</em></span>
             <select id="keyBase"><option value="media">Manba fayl vaqti (standart)</option><option value="clip">Klip boshidan</option></select>
           </label>

@@ -1,0 +1,7 @@
+{
+  "name": "geminicut-resolve",
+  "version": "@VERSION@",
+  "description": "GeminiCut - DaVinci Resolve Workflow Integration plugin",
+  "main": "main.js",
+  "private": true
+}

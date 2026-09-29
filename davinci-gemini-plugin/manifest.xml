@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BlackmagicDesign>
+    <Plugin>
+        <Id>com.uzstudio.geminicut</Id>
+        <Name>GeminiCut</Name>
+        <Version>@VERSION@</Version>
+        <Description>AI subtitr, montaj, sound effektlar, Claude va Video AI</Description>
+        <FilePath>main.js</FilePath>
+    </Plugin>
+</BlackmagicDesign>
