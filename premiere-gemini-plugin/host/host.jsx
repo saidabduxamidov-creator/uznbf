@@ -12,7 +12,7 @@
  * Barcha vaqtlar - sequence (timeline) soniyalarida, aks holda aytiladi.
  */
 
-var GC_VERSION = "4.0.0";
+var GC_VERSION = "4.2.0";
 var GC_TICKS = 254016000000;
 
 /* ======================= yordamchi funksiyalar ======================= */
@@ -824,3 +824,102 @@ function gc_flowImport(filePath, sequenceID, ticks, projectPath, useCurrent) {
         return gc_ok({ track: count + 1, seconds: track.clips[0].start.seconds, name: file.name });
     } catch (e) { return gc_fail("Import: " + (e.message || e.toString()) + ". Yuklangan MP4 saqlangan."); }
 }
+
+/* ======================= animatsion matn (PNG ketma-ketligi) ======================= */
+
+function gc_isTextPath(p) {
+    return /geminicut\/+matn\//.test(gc_normPath(p));
+}
+
+/* "GeminiCut Matn" bin'ini topadi yoki yaratadi */
+function gc_textBin() {
+    var root = app.project.rootItem;
+    for (var i = 0; i < root.children.numItems; i++) {
+        var c = root.children[i];
+        if (c.type === ProjectItemType.BIN && c.name === "GeminiCut Matn") return c;
+    }
+    var b = root.createBin("GeminiCut Matn");
+    return b || root;
+}
+
+/* Matn uchun video trek: o'sha vaqtdagi kliplardan yuqorida, bo'sh; bo'lmasa yangi trek (QE) */
+function gc_overlayTrack(seq, from, to) {
+    var top = -1, v;
+    for (v = 0; v < seq.videoTracks.numTracks; v++) {
+        if (!gc_trackFree(seq.videoTracks[v], from, to)) top = v;
+    }
+    for (v = top + 1; v < seq.videoTracks.numTracks; v++) {
+        if (!gc_isLocked(seq.videoTracks[v]) && gc_trackFree(seq.videoTracks[v], from, to)) return v;
+    }
+    var count = seq.videoTracks.numTracks;
+    try {
+        app.enableQE();
+        qe.project.getActiveSequence().addTracks(1, count, 0);
+    } catch (e) {}
+    return seq.videoTracks.numTracks > count ? count : -1;
+}
+
+/*
+ * gc_0000.png ... ketma-ketligini bitta klip qilib import qiladi va timeline'ga qo'yadi.
+ * at < 0 -> playhead. replace = { track, start } (yoki null) - eski matn o'rniga.
+ */
+function gc_importSequence(first, count, fps, at, replace, name) {
+    try {
+        var seq = gc_seq();
+        var file = new File(first);
+        if (!file.exists) return gc_fail("Kadrlar topilmadi: " + first);
+        var bin = gc_textBin();
+        if (!app.project.importFiles([file.fsName], true, bin, true)) return gc_fail("PNG ketma-ketligi import qilinmadi.");
+        var found = {};
+        gc_findItemByPath(bin, gc_normPath(file.fsName), found);
+        if (!found.item) gc_findItemByPath(app.project.rootItem, gc_normPath(file.fsName), found);
+        if (!found.item) return gc_fail("Import qilingan matn loyihada topilmadi.");
+        var item = found.item;
+        try { item.setOverrideFrameRate(fps); } catch (eF) {}
+        try { if (name) item.name = name; } catch (eN) {}
+        var dur = count / fps;
+        var time = at >= 0 ? at : gc_playhead(seq);
+        var idx = -1;
+        if (replace && replace.track >= 0 && replace.track < seq.videoTracks.numTracks) {
+            idx = replace.track;
+            var old = gc_itemByStart(seq.videoTracks[idx], replace.start, gc_frameDuration(seq));
+            if (old) {
+                time = old.start.seconds;
+                old.remove(false, false);
+            }
+        } else {
+            idx = gc_overlayTrack(seq, time, time + dur);
+        }
+        if (idx < 0) return gc_fail("Bo'sh video trek yo'q. Premiere'da yangi video trek qo'shing.");
+        var track = seq.videoTracks[idx];
+        var before = track.clips.numItems;
+        track.overwriteClip(item, String(Math.round(time * GC_TICKS)));
+        if (track.clips.numItems < before || track.clips.numItems === 0) return gc_fail("Matn joylashtirilgani tasdiqlanmadi. U Project'da (GeminiCut Matn).");
+        return gc_ok({ track: idx, seconds: time, duration: dur });
+    } catch (e) {
+        return gc_fail("Matn: " + (e.message || e.toString()));
+    }
+}
+
+/* Playhead ostidagi GeminiCut matni (tahrirlash uchun) */
+function gc_textAtPlayhead() {
+    try {
+        var seq = gc_seq();
+        var ph = gc_playhead(seq);
+        for (var v = seq.videoTracks.numTracks - 1; v >= 0; v--) {
+            var it = gc_itemAt(seq.videoTracks[v], ph);
+            if (!it || !it.projectItem) continue;
+            var p = "";
+            try { p = it.projectItem.getMediaPath(); } catch (eP) {}
+            if (p && gc_isTextPath(p)) return gc_ok({ track: v, start: it.start.seconds, end: it.end.seconds, path: p });
+        }
+        return gc_fail("Playhead ostida GeminiCut matni yo'q. Playhead'ni matn ustiga qo'ying.");
+    } catch (e) {
+        return gc_fail(e.message || e.toString());
+    }
+}
+
+/* Rang berish (LUT) hozircha faqat DaVinci Resolve versiyasida */
+function gc_colorTargets() { return gc_fail("Rang berish DaVinci Resolve versiyasida ishlaydi."); }
+function gc_applyGrade() { return gc_fail("Rang berish DaVinci Resolve versiyasida ishlaydi."); }
+function gc_revertGrade() { return gc_fail("Rang berish DaVinci Resolve versiyasida ishlaydi."); }

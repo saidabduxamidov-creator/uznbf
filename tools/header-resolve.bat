@@ -13,6 +13,7 @@ rem       Workflow Integration Plugins\GeminiCut papkasiga nusxalaydi
 rem       (bu papka umumiy - shuning uchun administrator ruxsati so'raladi).
 rem    3) Resolve Studio bilan birga keladigan WorkflowIntegration.node modulini
 rem       Resolve'ning Developer papkasidan plaginga nusxalaydi.
+rem    4) ChatGPT rang berishi uchun LUT\GeminiCut papkasini yaratadi.
 rem  Qo'shimcha dastur (Node.js, npm, Python) o'rnatish SHART EMAS.
 rem
 rem  Ishlatish:  GeminiCut-Resolve-Setup.bat [/S | /U]
@@ -21,22 +22,48 @@ rem ==========================================================================
 set "GC_VERSION=@VERSION@"
 set "GC_SHA=@SHA256@"
 set "GC_SELF=%~f0"
+rem Fayl Windows qator oxirisiz (faqat LF) yuklangan bo'lsa (masalan GitHub'dan) - cmd.exe
+rem belgilarni (goto :label) topa olmaydi. Shunday bo'lsa CRLF bilan tuzatilgan nusxasi ishga tushiriladi.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = [IO.File]::ReadAllText($env:GC_SELF); if ($t.Contains([string][char]13)) { exit 0 }; $n = Join-Path $env:TEMP 'GeminiCut-Resolve-Setup-fixed.bat'; [IO.File]::WriteAllText($n, $t.Replace([string][char]10, [string][char]13 + [char]10), [Text.Encoding]::ASCII); exit 3" >nul 2>&1
+if errorlevel 3 (
+    call "%TEMP%\GeminiCut-Resolve-Setup-fixed.bat" %*
+    exit /b
+)
 set "GC_ARG=%~1"
 set "GC_BMD=%ProgramData%\Blackmagic Design\DaVinci Resolve\Support"
 set "GC_DEST=%GC_BMD%\Workflow Integration Plugins\GeminiCut"
+set "GC_LUT=%GC_BMD%\LUT\GeminiCut"
 set "GC_LOG=%TEMP%\GeminiCut-Resolve-install.log"
 set "GC_WORK=%TEMP%\GeminiCut-R-%RANDOM%%RANDOM%"
 set "GC_SILENT="
 
 rem --- administrator ruxsati (ProgramData papkasiga yozish uchun) ---
-net session >nul 2>&1
+rem  Ikkinchi marta (UAC'dan keyin) /ELEV belgisi bilan ishga tushadi - cheksiz takrorlanmaydi.
+set "GC_ELEV="
+if /I "%~1"=="/ELEV" (
+    set "GC_ELEV=1"
+    set "GC_ARG="
+)
+if /I "%~2"=="/ELEV" set "GC_ELEV=1"
+fltmc >nul 2>&1
+if not errorlevel 1 goto :isAdmin
+if defined GC_ELEV goto :isAdmin
+echo.
+echo   Administrator ruxsati so'ralmoqda...
+echo   (Ochilgan oynada "Ha" / "Yes" ni bosing)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $a = @('/ELEV'); if ($env:GC_ARG) { $a = @($env:GC_ARG, '/ELEV') }; Start-Process -FilePath $env:GC_SELF -ArgumentList $a -Verb RunAs -ErrorAction Stop; exit 0 } catch { exit 1 }"
 if errorlevel 1 (
     echo.
-    echo   Administrator ruxsati so'ralmoqda...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath $env:GC_SELF -ArgumentList $env:GC_ARG -Verb RunAs"
-    exit /b 0
+    echo   [XATO] Administrator ruxsati berilmadi.
+    echo   Faylni sichqonchaning o'ng tugmasi bilan bosib,
+    echo   "Run as administrator" / "Zapusk ot imeni administratora" ni tanlang.
+    echo.
+    pause
+    exit /b 1
 )
+exit /b 0
 
+:isAdmin
 if /I "%GC_ARG%"=="/S" (
     set "GC_SILENT=1"
     goto :install
@@ -76,11 +103,12 @@ echo.
 > "%GC_LOG%" echo GeminiCut Resolve %GC_VERSION% install %DATE% %TIME%
 
 call :findNode
+if defined GC_NODE echo   Modul: %GC_NODE%
 if not defined GC_NODE (
-    call :err "WorkflowIntegration.node topilmadi. DaVinci Resolve Studio 20 yoki yangisi o'rnatilganini tekshiring."
-    goto :fail
+    echo   Ogohlantirish: WorkflowIntegration.node hozircha topilmadi.
+    echo   Plagin uni Resolve ishga tushganda o'zi qidiradi. Resolve Studio 20+ kerak.
+    >> "%GC_LOG%" echo WorkflowIntegration.node topilmadi - ish vaqtida qidiriladi
 )
-echo   Modul: %GC_NODE%
 call :waitResolveClosed || goto :fail
 
 echo   [1/3] Arxiv ajratilmoqda va tekshirilmoqda...
@@ -109,11 +137,10 @@ if errorlevel 8 (
     call :err "Fayllarni nusxalab bo'lmadi: %GC_DEST%"
     goto :fail
 )
-copy /Y "%GC_NODE%" "%GC_DEST%\WorkflowIntegration.node" >> "%GC_LOG%" 2>&1
-if not exist "%GC_DEST%\WorkflowIntegration.node" (
-    call :err "WorkflowIntegration.node nusxalanmadi."
-    goto :fail
-)
+if defined GC_NODE copy /Y "%GC_NODE%" "%GC_DEST%\WorkflowIntegration.node" >> "%GC_LOG%" 2>&1
+rem Rang berish (ChatGPT) LUT'lari uchun papka - oddiy foydalanuvchi ham yoza olsin (S-1-5-32-545 = Users)
+if not exist "%GC_LUT%" mkdir "%GC_LUT%" >nul 2>&1
+icacls "%GC_LUT%" /grant *S-1-5-32-545:(OI)(CI)M /T /Q >> "%GC_LOG%" 2>&1
 echo         OK - %GC_DEST%
 
 echo   [3/3] Vaqtinchalik fayllar tozalanmoqda...
@@ -129,7 +156,7 @@ echo     1. DaVinci Resolve Studio'ni oching (ochiq bo'lsa - yopib qayta oching)
 echo     2. Loyiha va timeline'ni oching.
 echo     3. Workspace ^> Workflow Integrations ^> GeminiCut
 echo     4. Sozlamalar bo'limiga Gemini API kalitini kiriting (bepul:
-echo        https://aistudio.google.com/apikey), Claude uchun - Anthropic kaliti.
+echo        https://aistudio.google.com/apikey), ChatGPT uchun OpenAI, Claude uchun Anthropic kaliti.
 echo     Qo'shimcha dastur (Node.js, npm, Python) o'rnatish SHART EMAS.
 echo.
 echo   Jurnal: %GC_LOG%
@@ -162,6 +189,7 @@ choice /C YN /N /M "  GeminiCut o'chirilsinmi? [Y/N]: "
 if errorlevel 2 exit /b 0
 call :waitResolveClosed || goto :fail
 rd /s /q "%GC_DEST%" >nul 2>&1
+if exist "%GC_LUT%" rd /s /q "%GC_LUT%" >nul 2>&1
 if exist "%GC_DEST%" (
     call :err "Papkani o'chirib bo'lmadi. DaVinci Resolve yopiqligini tekshiring."
     goto :fail
@@ -177,7 +205,7 @@ rem --------------------------------------------------------------------------
 echo.
 echo   ==========================================================
 echo     GeminiCut %GC_VERSION%  -  DaVinci Resolve Studio uchun
-echo     AI subtitr, montaj, effektlar, Claude, Video AI
+echo     AI subtitr, montaj, rang, 3D matn, ChatGPT, Claude
 echo   ==========================================================
 echo.
 exit /b 0

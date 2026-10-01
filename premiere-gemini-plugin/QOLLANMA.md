@@ -1,6 +1,6 @@
-# GeminiCut 4.0 — Premiere Pro uchun AI ish maydoni
+# GeminiCut 4.2 — Premiere Pro uchun AI ish maydoni
 
-Premiere Pro 2022, 2023, 2024 va **2025** (Windows). Qo'shimcha dastur (Node.js, npm,
+Premiere Pro 2022, 2023, 2024, **2025** va 2026 (Windows). Qo'shimcha dastur (Node.js, npm,
 Playwright va hokazo) o'rnatish **shart emas** — hammasi bitta `GeminiCut-Setup.bat` ichida.
 
 ## O'rnatish
@@ -8,8 +8,8 @@ Playwright va hokazo) o'rnatish **shart emas** — hammasi bitta `GeminiCut-Setu
 1. `GeminiCut-Setup.bat` ni ishga tushiring → menyuda **1** → `Y`.
    Windows "Windows protected your PC" desa: **More info → Run anyway** (fayl imzolanmagan).
 2. Premiere Pro'ni qayta oching: **Window → Extensions → GeminiCut - AI Subtitr va Montaj**.
-3. **Sozlamalar**: Gemini API kaliti (bepul, <https://aistudio.google.com/apikey>) va
-   ixtiyoriy ravishda Claude (Anthropic) API kaliti.
+3. **Sozlamalar**: Gemini API kaliti (bepul, <https://aistudio.google.com/apikey>), ixtiyoriy ravishda
+   Claude (Anthropic) va ChatGPT (OpenAI, <https://platform.openai.com/api-keys>) kalitlari.
 
 `/S` — savolsiz o'rnatish, `/U` — o'chirish. Admin huquqi kerak emas.
 
@@ -45,6 +45,24 @@ Timeline'da klipni tanlang va oddiy so'z bilan yozing, masalan: *"yuziga sekin z
 - motion keyframe'lar, SFX joylashuvi va (ruxsat bersangiz) kesishlarni rejalashtiradi;
 - reja ro'yxatda ko'rsatiladi — keraksizini olib tashlab, **Qo'llash**. Hammasi Ctrl+Z bilan qaytadi.
 
+### Matn (animatsion matnlar va 3D Liquid)
+- **2D shablonlar (12 ta):** Pop, Pastdan chiqish, Yozuv mashinkasi, Blur, Kinetik zoom (Reels), To'lqin,
+  Marker, Neon, Glitch, Yaltiroq gradient, Ikkiga ochilish, Lower third (ism + lavozim).
+- **3D Liquid (7 ta):** Suyuq oltin, Suyuq xrom, Jele, Suyuq shisha, Tomchilardan yig'ilish, Lava, 3D Candy —
+  haqiqiy 3D (hajm, yorug'lik, aks) va oqib turadigan suyuq sirt.
+- **Oson sozlash:** matn, shrift, qalinlik, 3 ta rang, o'lcham, soya/kontur/nur; 3D uchun material,
+  suyuqlik, oqim tezligi, chuqurlik, burilish, tomchilar; joy (tayyor nuqtalar yoki slayder), davomiylik,
+  tezlik. Hammasi jonli oldindan ko'rishda darhol ko'rinadi (**Kadr foni** — videongiz ustida ko'rish).
+- **Timeline'ga qo'yish** — plagin har bir kadrni shaffof PNG qilib chizadi va playhead joyiga,
+  videodan yuqoridagi bo'sh trekka qo'yadi (`Documents\GeminiCut\Matn`).
+- **Playhead'dagi matnni tahrirlash** — sozlamalari qaytadi, o'zgartirib **Yangilash** — o'sha joyda almashadi.
+- **AI yordamchi** — "videoga mos sarlavha" kabi topshiriq: AI matn, shablon va ranglarni tanlaydi.
+
+### ChatGPT
+Claude bo'limi kabi: klipni tanlang va so'z bilan yozing — ChatGPT kadrlarni ko'rib motion, SFX va
+kesishlarni rejalashtiradi. Model avtomatik (kalitingizga ochiq eng yangi GPT) yoki Sozlamalarda tanlanadi.
+Rang berish (color grading) — DaVinci Resolve versiyasida.
+
 ### Video AI (kadrdan video)
 - **Veo · avtomatik** — rasmiy Gemini API orqali: kadr + prompt → MP4 → yangi video trek.
   Gemini kalitingiz ishlatiladi (Veo pullik, AI Studio'da billing kerak).
@@ -72,6 +90,18 @@ erkin topshiriq. **Videodagi nutq** — subtitr matnini qaydga qo'shadi.
 | Flow: rasm yuklash maydoni topilmadi | Flow'da "Frames to Video" rejimini tanlab, birinchi kadr (+) tugmasini bosing |
 | Veo modellari yo'q | AI Studio'da billing yoqing yoki Google Flow usulidan foydalaning |
 | Claude: kalit noto'g'ri / kredit yo'q | console.anthropic.com da kalit va balansni tekshiring |
+| ChatGPT: "mablag' yo'q (insufficient_quota)" | platform.openai.com → Billing da hisobni to'ldiring |
+| 3D matn: "WebGL ishlamayapti" | Videokarta drayverini yangilang; 2D shablonlar baribir ishlaydi |
+
+## Boshqa kompyuterga berish
+
+- Faqat **`GeminiCut-Setup.bat`** faylini yuboring (Telegram, Google Drive, fleshka). Boshqa hech narsa kerak emas.
+- Windows **"Windows protected your PC"** desa: **More info → Run anyway**. Brauzer "xavfli bo'lishi mumkin"
+  desa: **Keep / Сохранить**. Sabab — fayl raqamli imzoga ega emas, ichida virus yo'q.
+- GitHub'dan yuklansa: **Raw → Download** (yoki "Download raw file"). Sahifadan nusxalab Notepad'ga qo'ymang.
+- Fayl buzilgan bo'lsa o'rnatuvchi o'zi aytadi (SHA-256 tekshiruvi). Qator oxirlari buzilgan bo'lsa ham
+  (masalan GitHub "Copy"), o'rnatuvchi o'zini avtomatik tuzatib ishga tushadi.
+- Har bir foydalanuvchi o'z API kalitini kiritadi (kalitlar faqat o'z kompyuterida saqlanadi).
 
 Batafsil: **Sozlamalar → Jurnal**.
 
@@ -80,7 +110,8 @@ Batafsil: **Sozlamalar → Jurnal**.
 ```
 client/js/  cep.js (Premiere aloqa) · audio.js (VAD) · subtitles.js · gemini.js (Gemini + Veo)
             ai.js (Claude HTTPS + umumiy matn AI) · motion.js (easing, presetlar) · sfxgen.js
-            library.js (effektlar) · notes.js · claude.js · cdp.js (Chrome DevTools) · flow.js · main.js
+            library.js (effektlar) · notes.js · claude.js (Claude/ChatGPT montajchi) · chatgpt.js
+            color.js (LUT, kadr tahlili) · textfx.js (2D/3D matn renderi) · text.js · cdp.js · flow.js · main.js
 host/host.jsx  ExtendScript (faqat ASCII): audio/kadr eksporti, motion, SFX, kesish, SRT, import
 tests/      node --test tests/*.test.cjs  ·     node tests/ui.e2e.cjs  (Chromium + Premiere taqlidi)
 ```

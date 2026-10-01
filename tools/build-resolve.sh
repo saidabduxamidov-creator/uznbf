@@ -28,7 +28,7 @@ rm -f "$dist/client/js/cep.js"
 cp davinci-gemini-plugin/bridge.js "$dist/client/js/bridge.js"
 sed -i 's#js/cep.js#js/bridge.js#' "$dist/client/index.html"
 find "$dist/client" -type f \( -name '*.html' -o -name '*.js' \) ! -name bridge.js -print0 | xargs -0 sed -i \
-  -e 's/Premiere Pro 2022-2025/DaVinci Resolve Studio 20/g' \
+  -e 's/Premiere Pro 2022-202[0-9]/DaVinci Resolve Studio 20/g' \
   -e 's/Adobe Premiere Pro/DaVinci Resolve/g' \
   -e 's/Premiere Pro/DaVinci Resolve/g' \
   -e 's/Premiere/Resolve/g'

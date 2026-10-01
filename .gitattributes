@@ -1,2 +1,6 @@
 *.bat text eol=crlf
 *.sh text eol=lf
+# Tayyor o'rnatuvchilar GitHub'dan yuklanganda ham Windows qator oxiri (CRLF) bilan kelishi shart -
+# aks holda cmd.exe "goto :label" ni topa olmaydi. Shuning uchun ular baytma-bayt saqlanadi.
+GeminiCut-Setup.bat -text
+GeminiCut-Resolve-Setup.bat -text

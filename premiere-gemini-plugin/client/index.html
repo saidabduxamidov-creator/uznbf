@@ -27,6 +27,9 @@
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6V4.5h14V6M12 4.5v15M9 19.5h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-gpt" viewBox="0 0 24 24"><path d="M12 3.2a4.3 4.3 0 0 1 4.2 3.4 4.3 4.3 0 0 1 3.1 6.6 4.3 4.3 0 0 1-4.5 6.5 4.3 4.3 0 0 1-7.6-1.5 4.3 4.3 0 0 1-2.4-7.3A4.3 4.3 0 0 1 12 3.2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9.2 8.6 14.6 11.7v5.1M14.8 7.6 9.4 10.7v4.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   </svg>
 
@@ -36,7 +39,7 @@
         <div class="logo"><svg><use href="#i-spark"/></svg></div>
         <div>
           <div class="brand-name">GeminiCut</div>
-          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.0</span></div>
+          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.2</span></div>
         </div>
       </div>
       <div class="status">
@@ -64,7 +67,9 @@
       <button class="tab active" data-tab="subs" role="tab"><svg><use href="#i-cc"/></svg><span>Subtitr</span></button>
       <button class="tab" data-tab="edit" role="tab"><svg><use href="#i-cut"/></svg><span>Montaj</span></button>
       <button class="tab" data-tab="sounds" role="tab"><svg><use href="#i-wave"/></svg><span>Effektlar</span></button>
-      <button class="tab" data-tab="claude" role="tab"><svg><use href="#i-claude"/></svg><span>Claude</span><b class="new-badge">AI</b></button>
+      <button class="tab" data-tab="text" role="tab"><svg><use href="#i-text"/></svg><span>Matn</span><b class="new-badge">3D</b></button>
+      <button class="tab" data-tab="chatgpt" role="tab"><svg><use href="#i-gpt"/></svg><span>ChatGPT</span><b class="new-badge">AI</b></button>
+      <button class="tab" data-tab="claude" role="tab"><svg><use href="#i-claude"/></svg><span>Claude</span></button>
       <button class="tab" data-tab="flow" role="tab"><svg><use href="#i-video"/></svg><span>Video AI</span></button>
       <button class="tab" data-tab="notes" role="tab"><svg><use href="#i-note"/></svg><span>Bloknot</span></button>
       <button class="tab" data-tab="settings" role="tab"><svg><use href="#i-gear"/></svg><span>Sozlamalar</span></button>
@@ -266,6 +271,173 @@
         <audio id="sfxPlayer" hidden></audio>
       </section>
 
+      <!-- ============ MATN (2D shablonlar va 3D Liquid) ============ -->
+      <section class="view" id="view-text">
+        <div class="section-heading"><div><div class="eyebrow">ANIMATSION MATN</div><h1>Matn animatsiyalari</h1><p>Shablonni tanlang, matnni yozing, sozlang - bir bosishda timeline'ga.</p></div><span class="version-chip">2D · 3D Liquid</span></div>
+        <div class="segmented tx-kind" id="txKind"><button data-v="2d" class="on">2D shablonlar</button><button data-v="3d">3D Liquid</button></div>
+        <div class="tx-grid" id="txGrid"></div>
+        <div class="card tx-preview-card">
+          <div class="tx-stage"><canvas id="txPreview" width="320" height="180"></canvas></div>
+          <div class="tx-transport">
+            <button class="icon-btn" id="txPlay" title="To'xtatish / davom ettirish">❚❚</button>
+            <input type="range" id="txScrub" min="0" max="1000" value="0" />
+            <span id="txTime">0.0s</span>
+            <button class="link-btn" id="txBg" title="Fon sifatida playhead'dagi kadrni ko'rsatish">Kadr foni</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-heading"><span class="step-number">01</span><h2>Matn</h2></div>
+          <textarea id="txText" rows="2" spellcheck="false" placeholder="Matnni yozing (Enter - yangi qator)"></textarea>
+          <label class="field top-gap" id="txSubWrap"><span>Ikkinchi qator (lavozim)</span><input id="txSub" spellcheck="false" /></label>
+          <div class="grid2 top-gap">
+            <label class="field"><span>Shrift</span><select id="txFont"></select></label>
+            <div class="field"><span>Qalinlik</span><div class="segmented" id="txWeight"><button data-v="400">Oddiy</button><button data-v="700">Qalin</button><button data-v="900">Juda</button></div></div>
+          </div>
+          <label class="switch-row"><input type="checkbox" id="txUpper" /><i class="switch"></i><em>KATTA HARFLAR</em></label>
+        </div>
+        <div class="card">
+          <div class="card-heading"><span class="step-number">02</span><h2>Ko'rinish</h2><span class="hint-inline">o'zgarish darhol ko'rinadi</span></div>
+          <div class="tx-colors">
+            <label><input type="color" id="txColor" /><span>Asosiy</span></label>
+            <label><input type="color" id="txColor2" /><span>Ikkinchi</span></label>
+            <label data-kind="2d"><input type="color" id="txAccent" /><span>Urg'u / fon</span></label>
+          </div>
+          <div class="field"><span>O'lcham <b id="txSizeVal"></b></span><input type="range" id="txSize" min="0.02" max="0.25" step="0.005" /></div>
+          <div class="field"><span>Harflar oralig'i</span><input type="range" id="txSpacing" min="-0.05" max="0.4" step="0.01" /></div>
+          <div data-kind="2d">
+            <div class="grid2">
+              <div class="field"><span>Soya</span><input type="range" id="txShadow" min="0" max="1" step="0.05" /></div>
+              <div class="field"><span>Kontur</span><input type="range" id="txStroke" min="0" max="1" step="0.05" /></div>
+            </div>
+            <div class="field"><span>Nur (glow)</span><input type="range" id="txGlow" min="0" max="1" step="0.05" /></div>
+          </div>
+          <div data-kind="3d" hidden>
+            <label class="field"><span>Material</span>
+              <select id="txMaterial"><option value="gold">Suyuq oltin (metall)</option><option value="chrome">Xrom / simob</option><option value="jelly">Jele</option><option value="glass">Shisha</option><option value="water">Suv</option><option value="lava">Lava</option><option value="candy">Candy plastik</option></select>
+            </label>
+            <div class="grid2">
+              <div class="field"><span>Suyuqlik</span><input type="range" id="txLiquid" min="0" max="1.5" step="0.05" /></div>
+              <div class="field"><span>Oqim tezligi</span><input type="range" id="txFlow" min="0" max="3" step="0.1" /></div>
+            </div>
+            <div class="grid2">
+              <div class="field"><span>Chuqurlik</span><input type="range" id="txDepth" min="0.05" max="1" step="0.05" /></div>
+              <div class="field"><span>Burilish</span><input type="range" id="txRot" min="0" max="80" step="5" /></div>
+            </div>
+            <div class="field"><span>Qirra yumaloqligi</span><input type="range" id="txBevel" min="0" max="0.2" step="0.01" /></div>
+            <label class="switch-row"><input type="checkbox" id="txDrops" /><i class="switch"></i><em>Tomchilardan yig'ilish</em></label>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-heading"><span class="step-number">03</span><h2>Joy va vaqt</h2></div>
+          <div class="tx-pos-row">
+            <div class="tx-pos" id="txPos" title="Kadrdagi joy">
+              <button data-x="0.5" data-y="0.18"></button><button data-x="0.5" data-y="0.5"></button><button data-x="0.5" data-y="0.82"></button>
+              <button data-x="0.08" data-y="0.82"></button><button data-x="0.08" data-y="0.18"></button><button data-x="0.5" data-y="0.66"></button>
+            </div>
+            <div class="tx-pos-sliders">
+              <div class="field"><span>Gorizontal</span><input type="range" id="txX" min="0" max="1" step="0.01" /></div>
+              <div class="field"><span>Vertikal</span><input type="range" id="txY" min="0" max="1" step="0.01" /></div>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field"><span>Davomiylik <b id="txDurVal"></b></span><input type="range" id="txDur" min="1" max="10" step="0.5" /></div>
+            <div class="field"><span>Animatsiya tezligi</span><input type="range" id="txSpeed" min="0.4" max="2.5" step="0.1" /></div>
+          </div>
+        </div>
+        <div class="card ai-writer">
+          <div class="card-heading"><h2>AI yordamchi</h2><span class="hint-inline">ChatGPT, Claude yoki Gemini</span></div>
+          <div class="input-group"><input id="txAsk" placeholder="Masalan: videoga mos qisqa, kuchli sarlavha va uslub" /><button class="btn small primary" id="txAI">Yarat</button></div>
+        </div>
+        <div class="card tx-actions">
+          <button class="btn primary big" id="txInsert"><svg><use href="#i-download"/></svg><span>Timeline'ga qo'yish</span></button>
+          <div class="tx-progress" id="txProgress" hidden><div class="bar"><i id="txBar"></i></div><span id="txProgLabel"></span><button class="link-btn danger" id="txCancel">To'xtatish</button></div>
+          <div class="button-row compact">
+            <button class="link-btn" id="txEdit">Playhead'dagi matnni tahrirlash</button>
+            <button class="link-btn muted" id="txStopEdit" hidden>Tahrirni bekor qilish</button>
+            <button class="link-btn muted" id="txFolder">Matnlar papkasi</button>
+          </div>
+          <p id="txStatus" role="status"></p>
+        </div>
+      </section>
+
+      <!-- ============ CHATGPT ============ -->
+      <section class="view" id="view-chatgpt">
+        <div class="section-heading"><div><div class="eyebrow">CHATGPT · OPENAI</div><h1>ChatGPT studiya</h1><p>Professional rang berish, montaj va motion - so'z bilan.</p></div><span class="version-chip" id="gpModelChip">GPT</span></div>
+        <div class="segmented gp-mode" id="gpMode" data-host="resolve"><button data-v="color" class="on">Rang berish</button><button data-v="edit">Montaj · motion · SFX</button></div>
+
+        <div id="gpColorPane" data-host="resolve">
+          <div class="card">
+            <div class="card-heading"><span class="step-number">01</span><h2>Qaysi kliplar</h2></div>
+            <div class="segmented" id="gcScope"><button data-v="playhead" class="on">Playhead klipi</button><button data-v="track">Shu trek</button><button data-v="all">Hammasi</button></div>
+            <button class="btn top-gap" id="gcCapture"><svg><use href="#i-eye"/></svg>Kadrlarni olish va tahlil</button>
+            <div class="gc-clips" id="gcClips">Kadrlarni olish tugmasini bosing.</div>
+          </div>
+          <div class="card gc-preview-card">
+            <div class="gc-stage empty" id="gcStage"><canvas id="gcPreview" width="320" height="180"></canvas><span class="gc-empty">Oldindan ko'rish shu yerda</span></div>
+            <div class="gc-compare"><span>Oldin</span><input type="range" id="gcCompare" min="0" max="100" value="50" /><span>Keyin</span></div>
+            <div class="gc-preview-label" id="gcPreviewLabel"></div>
+          </div>
+          <div class="card">
+            <div class="card-heading"><span class="step-number">02</span><h2>Uslub</h2><span class="hint-inline">tayyor ko'rinishlar</span></div>
+            <div class="gc-presets" id="gcPresets"></div>
+          </div>
+          <div class="card">
+            <div class="card-heading"><span class="step-number">03</span><h2>ChatGPT kolorist</h2></div>
+            <textarea id="gcPrompt" rows="3" placeholder="Masalan: Kinematik, iliq teri ranglari, soyalar biroz moviy. Hamma kadrlar bir xil ko'rinsin."></textarea>
+            <div class="cl-examples">
+              <button class="cl-example gc-example" data-text="Gollivud kinosi kabi: teal & orange, teri ranglari tabiiy va iliq, kontrast chiroyli.">Kino uslubi</button>
+              <button class="cl-example gc-example" data-text="Toza, yorqin reklama ko'rinishi: oq rang toza, ranglar jonli lekin tabiiy.">Reklama</button>
+              <button class="cl-example gc-example" data-text="Iliq oltin soat (golden hour), yumshoq kontrast, romantik.">Golden hour</button>
+              <button class="cl-example gc-example" data-text="Barcha kadrlarni bir-biriga moslashtir: bir xil oq balans va yorqinlik, tabiiy ko'rinish.">Moslashtirish</button>
+            </div>
+            <button class="btn primary big" id="gcAsk"><svg><use href="#i-gpt"/></svg>ChatGPT bilan rang berish</button>
+            <p class="gc-summary" id="gcSummary" hidden></p>
+          </div>
+          <div class="card">
+            <div class="card-heading"><span class="step-number">04</span><h2>Sozlash</h2><button class="link-btn" id="gcResetAdj">Tiklash</button></div>
+            <label class="switch-row"><input type="checkbox" id="gcAuto" checked /><i class="switch"></i><em>Avto balans <small>oq rang, yorug'lik, qora/oq nuqtalar</small></em></label>
+            <div class="field"><span>Balans kuchi</span><input type="range" id="gcAutoStrength" min="0" max="1" step="0.05" value="0.7" /></div>
+            <div id="gcSliders"></div>
+            <p class="hint">Slayderni ikki marta bossangiz - asl qiymatga qaytadi.</p>
+          </div>
+          <div class="card gc-actions">
+            <button class="btn primary big" id="gcApply"><svg><use href="#i-check"/></svg>Rangni qo'llash</button>
+            <button class="btn ghost" id="gcRevert">Asl rangga qaytarish</button>
+            <div class="cl-progress"><span class="spinner" id="gcSpinner" hidden></span><p id="gcStatus" role="status"></p><button class="link-btn danger" id="gcCancel" hidden>Bekor qilish</button></div>
+            <p class="hint">Rang alohida "GeminiCut AI" versiyasida qo'yiladi - sizning asl grade'ingiz saqlanadi.</p>
+          </div>
+        </div>
+
+        <div id="gpEditPane">
+          <div class="card">
+            <div class="card-heading"><span class="step-number">01</span><h2>Qaysi klip</h2><button class="link-btn" id="gpRefresh">Yangilash</button></div>
+            <div class="cl-clips" id="gpClips">Timeline'da klipni tanlang, so'ng "Yangilash" ni bosing.</div>
+          </div>
+          <div class="card">
+            <div class="card-heading"><span class="step-number">02</span><h2>Nima qilamiz?</h2></div>
+            <textarea id="gpPrompt" rows="4" placeholder="Masalan: Boshida sekin zoom, urg'uli joylarda punch-in va whoosh, oxirida fade out."></textarea>
+            <div class="cl-examples">
+              <button class="cl-example" data-text="Klipga sekin, silliq zoom in qil va boshida yengil whoosh qo'y.">Silliq zoom + whoosh</button>
+              <button class="cl-example" data-text="Har bir urg'uli gapda qisqa punch-in zoom va mos sound effekt qo'y. Juda ko'p emas, professional.">Urg'ularga punch-in</button>
+              <button class="cl-example" data-text="Reels uslubida dinamik qil: kirishda zarba bilan zoom, o'rtada silkinish, oxirida fade out va mos SFX.">Reels uslubi</button>
+            </div>
+            <div class="cl-options">
+              <label class="switch-row"><input type="checkbox" id="gpFrames" checked /><i class="switch"></i><em>Kadrlarni ko'rsatish</em></label>
+              <label class="switch-row"><input type="checkbox" id="gpTranscript" checked /><i class="switch"></i><em>Nutq matnidan foydalanish</em></label>
+              <label class="switch-row"><input type="checkbox" id="gpSfx" checked /><i class="switch"></i><em>SFX qo'shish</em></label>
+              <label class="switch-row"><input type="checkbox" id="gpCuts" /><i class="switch"></i><em>Kesishga ruxsat</em></label>
+            </div>
+            <button class="btn primary big" id="gpRun"><svg><use href="#i-gpt"/></svg>ChatGPT bilan reja tuzish</button>
+            <div class="cl-progress"><span class="spinner" id="gpSpinner" hidden></span><p id="gpStatus" role="status"></p><button class="link-btn danger" id="gpCancel" hidden>Bekor qilish</button></div>
+          </div>
+          <div class="results" id="gpPlan" hidden>
+            <div class="results-head"><div><div class="results-title">ChatGPT rejasi</div><div class="results-sub" id="gpSummary"></div></div><button class="link-btn muted" id="gpDiscard">Yopish</button></div>
+            <div class="cue-list" id="gpPlanList"></div>
+            <div class="sticky-actions"><button class="btn primary" id="gpApply"><svg><use href="#i-check"/></svg>Qo'llash</button></div>
+          </div>
+        </div>
+      </section>
+
       <!-- ============ CLAUDE ============ -->
       <section class="view" id="view-claude">
         <div class="section-heading"><div><div class="eyebrow">CLAUDE OPUS 5.5</div><h1>Claude montajchi</h1><p>So'z bilan ayting - Claude motion, SFX va kesishlarni rejalashtiradi.</p></div><span class="version-chip">Opus 5.5</span></div>
@@ -400,9 +572,21 @@
           </div>
           <button class="btn ghost" id="btnTestClaude">Claude kalitini tekshirish</button>
           <label class="field top-gap">
-            <span>Matn uchun AI <em class="opt">imlo tekshiruvi, bloknot</em></span>
-            <select id="textAI"><option value="auto">Avtomatik (bori)</option><option value="claude">Claude Opus 5.5</option><option value="gemini">Gemini</option></select>
+            <span>Matn uchun AI <em class="opt">imlo tekshiruvi, bloknot, sarlavhalar</em></span>
+            <select id="textAI"><option value="auto">Avtomatik (bori)</option><option value="claude">Claude Opus 5.5</option><option value="openai">ChatGPT</option><option value="gemini">Gemini</option></select>
           </label>
+        </div>
+        <div class="card">
+          <div class="field">
+            <span>ChatGPT (OpenAI) API kalit <em class="opt">ChatGPT bo'limi, rang berish</em></span>
+            <div class="input-group">
+              <input id="openaiKey" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+              <button class="icon-btn" id="toggleOpenaiKey" title="Ko'rsatish"><svg><use href="#i-eye"/></svg></button>
+            </div>
+            <div class="hint">Kalit faqat shu kompyuterda saqlanadi. ChatGPT'ga faqat kichik kadrlar va matn yuboriladi. <a href="#" id="getOpenaiKey">Kalit olish →</a></div>
+          </div>
+          <label class="field"><span>ChatGPT modeli <em class="opt">bo'sh - avtomatik (eng yangi GPT)</em></span><input id="openaiModel" list="openaiModels" placeholder="Avtomatik" spellcheck="false" /><datalist id="openaiModels"></datalist></label>
+          <button class="btn ghost" id="btnTestOpenai">ChatGPT kalitini tekshirish</button>
         </div>
         <div class="card">
           <label class="field">
@@ -437,7 +621,7 @@
           <details class="log-box"><summary>Jurnal (diagnostika)</summary><pre id="log"></pre></details>
           <button class="btn ghost" id="btnClearCache">Tahlil keshini tozalash</button>
         </div>
-        <p class="about">GeminiCut <span id="ver">4.0.1</span> &middot; Premiere Pro 2022-2025</p>
+        <p class="about">GeminiCut <span id="ver">4.2.0</span> &middot; Premiere Pro 2022-2026</p>
       </section>
     </main>
 
@@ -455,6 +639,10 @@
   <script src="js/library.js"></script>
   <script src="js/notes.js"></script>
   <script src="js/claude.js"></script>
+  <script src="js/color.js"></script>
+  <script src="js/chatgpt.js"></script>
+  <script src="js/textfx.js"></script>
+  <script src="js/text.js"></script>
   <script src="js/flow.js"></script>
   <script src="js/main.js"></script>
 </body>

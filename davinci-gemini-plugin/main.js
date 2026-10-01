@@ -3,7 +3,7 @@
  * Resolve: Workspace -> Workflow Integrations -> GeminiCut
  *
  * WorkflowIntegration.node - Resolve Studio bilan birga keladigan modul; o'rnatuvchi uni
- * Resolve'ning Developer papkasidan shu yerga nusxalaydi.
+ * Resolve'ning Developer papkasidan shu yerga nusxalaydi (topilmasa - ishga tushganda qidiriladi).
  */
 "use strict";
 
@@ -17,11 +17,30 @@ let WorkflowIntegration = null;
 let host = null;
 let win = null;
 
+// Modul plagin papkasida bo'lmasa (o'rnatuvchi topa olmagan bo'lsa) - Resolve'ning o'z papkalaridan qidiriladi
+function moduleCandidates() {
+  const pd = process.env.PROGRAMDATA || "C:\\ProgramData";
+  const dev = ["Developer", "Workflow Integrations", "Examples", "SamplePlugin", "WorkflowIntegration.node"];
+  return [
+    path.join(__dirname, "WorkflowIntegration.node"),
+    path.join(pd, "Blackmagic Design", "DaVinci Resolve", "Support", ...dev),
+    path.join(process.env.ProgramFiles || "C:\\Program Files", "Blackmagic Design", "DaVinci Resolve", "WorkflowIntegration.node"),
+    path.join("/Library/Application Support/Blackmagic Design/DaVinci Resolve", ...dev),
+    path.join("/opt/resolve", ...dev),
+  ];
+}
+
+function loadModule() {
+  for (const p of moduleCandidates()) {
+    try { if (fs.existsSync(p)) return require(p); } catch (e) { /* keyingisi */ }
+  }
+  return null;
+}
+
 async function initResolve() {
-  try {
-    WorkflowIntegration = require("./WorkflowIntegration.node");
-  } catch (e) {
-    throw new Error("WorkflowIntegration.node topilmadi. GeminiCut-Resolve-Setup.bat ni qayta ishga tushiring.");
+  WorkflowIntegration = loadModule();
+  if (!WorkflowIntegration) {
+    throw new Error("WorkflowIntegration.node topilmadi. DaVinci Resolve Studio 20 o'rnatilganini tekshiring va GeminiCut-Resolve-Setup.bat ni qayta ishga tushiring.");
   }
   const ok = await WorkflowIntegration.Initialize(PLUGIN_ID);
   if (!ok) throw new Error("Resolve bilan bog'lanib bo'lmadi. Workflow Integration faqat DaVinci Resolve Studio'da ishlaydi.");

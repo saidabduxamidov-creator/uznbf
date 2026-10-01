@@ -126,3 +126,62 @@ test('SRT, kadr eksporti va AI video importi', async () => {
   r = await host.gc_flowImport(mp4, 'boshqa', cap.ticks, '', false);
   assert.strictEqual(r.ok, false);
 });
+
+test('rang: kliplar, LUT alohida versiyada, qayta qo\'llash va asl holga qaytarish', async () => {
+  const r = setup();
+  const lutDir = tmp();
+  const host = createHost(r.resolve, { fs, path, sleep: () => Promise.resolve(), lutDir });
+  let t = await host.gc_colorTargets('playhead');
+  assert.ok(t.ok, t.error);
+  assert.strictEqual(t.clips.length, 1); assert.strictEqual(t.clips[0].start, 6);
+  t = await host.gc_colorTargets('all');
+  assert.strictEqual(t.clips.length, 3, 'faqat V1 dagi 3 ta video klip');
+  require('../../premiere-gemini-plugin/client/js/color.js');
+  const G = globalThis.GCColor;
+  const cube = G.buildCube(G.PRESETS.cinema.look, 9, 'test');
+  const item = r.tl.tracks.video[0][1];
+  let a = await host.gc_applyGrade({ id: item.id, name: 'C9966.MP4', cube, cdl: G.toCDL({}) }, { version: true });
+  assert.ok(a.ok, a.error);
+  assert.strictEqual(a.mode, 'lut'); assert.strictEqual(a.versioned, true);
+  assert.strictEqual(item.cur, 'GeminiCut AI');
+  assert.ok(fs.existsSync(item.luts['GeminiCut AI']) && item.luts['GeminiCut AI'].startsWith(lutDir));
+  assert.ok(!item.luts['Version 1'], 'asl versiyaga tegilmadi');
+  // qayta tahlil: AI versiyasidan asl versiyaga qaytib kadr olinadi, keyin qayta qo'llash
+  t = await host.gc_colorTargets('playhead');
+  assert.strictEqual(item.cur, 'Version 1');
+  a = await host.gc_applyGrade({ id: item.id, name: 'C9966.MP4', cube }, {});
+  assert.strictEqual(item.cur, 'GeminiCut AI'); assert.strictEqual(item.versions.length, 2);
+  const rv = await host.gc_revertGrade([item.id]);
+  assert.strictEqual(rv.reverted, 1);
+  assert.strictEqual(item.cur, 'Version 1'); assert.deepStrictEqual(item.versions, ['Version 1']);
+  // LUT papkasiga yozib bo'lmasa - CDL zaxirasi
+  const blocker = path.join(tmp(), 'fayl'); fs.writeFileSync(blocker, 'x'); // papka o'rnida fayl -> yozib bo'lmaydi
+  const host2 = createHost(r.resolve, { fs, path, sleep: () => Promise.resolve(), lutDir: path.join(blocker, 'LUT') });
+  a = await host2.gc_applyGrade({ id: item.id, name: 'x', cube, cdl: G.toCDL({ exposure: 0.5 }) }, {});
+  assert.ok(a.ok, a.error); assert.strictEqual(a.mode, 'cdl'); assert.strictEqual(item.cdl.NodeIndex, '1');
+});
+
+test('animatsion matn: PNG ketma-ketligi yuqori trekka, tahrir uchun topiladi va almashtiriladi', async () => {
+  const { host, tl } = setup();
+  const dir = path.join(tmp(), 'GeminiCut', 'Matn', 'a');
+  fs.mkdirSync(dir, { recursive: true });
+  for (let i = 0; i < 50; i++) fs.writeFileSync(path.join(dir, 'gc_' + String(i).padStart(4, '0') + '.png'), 'x');
+  let r = await host.gc_importSequence(path.join(dir, 'gc_0000.png'), 50, 25, -1, null, 'Matn');
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(r.track, 1, 'V1 band -> V2 (yangi trek)');
+  assert.strictEqual(tl.tracks.video[1][0].start, START + 8 * FPS);
+  assert.strictEqual(tl.tracks.video[1][0].end - tl.tracks.video[1][0].start, 50);
+  // ikkinchi matn ham o'sha vaqtga: V2 band -> V3
+  r = await host.gc_importSequence(path.join(dir, 'gc_0000.png'), 50, 25, 8, null, 'Matn 2');
+  assert.strictEqual(r.track, 2);
+  // playhead ostidagi matn - eng yuqoridagisi
+  const at = await host.gc_textAtPlayhead();
+  assert.ok(at.ok, at.error); assert.strictEqual(at.track, 2); assert.match(at.path, /Matn/);
+  // almashtirish: eski o'chadi, yangisi o'sha joyda
+  r = await host.gc_importSequence(path.join(dir, 'gc_0000.png'), 40, 25, -1, { track: at.track, start: at.start }, 'Yangi');
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(tl.tracks.video[2].length, 1); assert.strictEqual(tl.tracks.video[2][0].end - tl.tracks.video[2][0].start, 40);
+  // matnlar rang berishga kirmaydi
+  const t = await host.gc_colorTargets('all');
+  assert.strictEqual(t.clips.length, 3);
+});

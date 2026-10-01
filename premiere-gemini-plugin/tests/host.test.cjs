@@ -114,3 +114,29 @@ test('kesish: video va nutq treklari sinxron, musiqa tegilmaydi', () => {
   const fmt = t => t.items.map(x => x.start.seconds.toFixed(2) + '-' + x.end.seconds.toFixed(2)).join(' ');
   assert.strictEqual(fmt(v1), fmt(a1)); assert.strictEqual(fmt(a3), '0.00-25.00');
 });
+
+test('animatsion matn: PNG ketma-ketligi bin\'ga, kliplardan yuqori trekka, almashtirish va tahrir', () => {
+  const { env, v1, v2, host } = timeline();
+  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gcp-')), 'GeminiCut', 'Matn', 'a');
+  fs.mkdirSync(dir, { recursive: true });
+  for (let i = 0; i < 75; i++) fs.writeFileSync(path.join(dir, 'gc_' + String(i).padStart(4, '0') + '.png'), 'x');
+  let r = host.call('gc_importSequence', path.join(dir, 'gc_0000.png'), 75, 30, -1, null, 'Matn · Pop');
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(r.track, 1, 'V1 band -> V2');
+  assert.strictEqual(v2.items.length, 1);
+  assert.strictEqual(v2.items[0].start.seconds, 10);
+  assert.strictEqual(+(v2.items[0].end.seconds - v2.items[0].start.seconds).toFixed(3), 2.5, '75 kadr @30fps (override)');
+  const bin = env.app.project.rootItem.children[0];
+  assert.strictEqual(bin.name, 'GeminiCut Matn');
+  // yana o'sha joyga -> V2 band, yangi V3 trek
+  r = host.call('gc_importSequence', path.join(dir, 'gc_0000.png'), 75, 30, 10, null, '');
+  assert.ok(r.ok, r.error); assert.strictEqual(r.track, 2);
+  const at = host.call('gc_textAtPlayhead');
+  assert.ok(at.ok, at.error); assert.strictEqual(at.track, 2);
+  r = host.call('gc_importSequence', path.join(dir, 'gc_0000.png'), 75, 30, -1, { track: 2, start: at.start }, '');
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(env.seq.videoTracks[2].items.length, 1, 'eski matn o\'rniga yangisi');
+  assert.strictEqual(v1.items.length, 3, 'video kliplarga tegilmadi');
+  const c = host.call('gc_colorTargets', 'all');
+  assert.strictEqual(c.ok, false); assert.match(c.error, /Resolve/);
+});

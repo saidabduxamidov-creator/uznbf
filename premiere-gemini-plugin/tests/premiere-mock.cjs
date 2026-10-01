@@ -62,10 +62,16 @@ function collection(arr) { return new Proxy(arr, { get: (o, k) => (k === 'numTra
 
 function makeEnv({ video, audio, duration, fps = 25, width = 1080, height = 1920, playhead = 0, appPath = '/tmp' }) {
   const project = { root: [], path: '/proj/test.prproj' };
-  const findOrMake = (p) => {
-    let it = project.root.find(x => x.getMediaPath() === p);
+  const findOrMake = (p, bin, numbered) => {
+    const list = bin && bin.items ? bin.items : project.root;
+    let it = list.find(x => x.getMediaPath && x.getMediaPath() === p);
     if (!it) { it = { name: path.basename(p), type: 1, duration: /sfx|\.wav$/i.test(p) ? 0.8 : 5, getMediaPath: () => p,
-      getInPoint: () => T(0), getOutPoint() { return T(this.duration); }, createSubClip() { return this; } }; project.root.push(it); }
+      getInPoint: () => T(0), getOutPoint() { return T(this.duration); }, createSubClip() { return this; } }; list.push(it); }
+    if (numbered) { // PNG ketma-ketligi: papkadagi gc_####.png soni = kadrlar
+      const frames = fs.readdirSync(path.dirname(p)).filter(n => /^gc_\d+\.png$/.test(n)).length;
+      it.frames = frames; it.duration = frames / 25;
+      it.setOverrideFrameRate = function (f) { this.fps = f; this.duration = this.frames / f; };
+    }
     return it;
   };
   const seq = {
@@ -85,9 +91,10 @@ function makeEnv({ video, audio, duration, fps = 25, width = 1080, height = 1920
   };
   function razor(tr) { return { razor(tc) { const s = parseFloat(tc.slice(2)); const it = tr.items.find(x => x.start.seconds < s - 1e-6 && x.end.seconds > s + 1e-6); if (!it) return;
     const b = makeItem(tr, s, it.end.seconds, it.inPoint.seconds + (s - it.start.seconds), it.projectItem.getMediaPath()); it.end = T(s); tr.items.splice(tr.items.indexOf(it) + 1, 0, b); } }; }
-  const rootItem = { get children() { return Object.assign(project.root.slice(), { numItems: project.root.length }); } };
+  const rootItem = { get children() { return Object.assign(project.root.slice(), { numItems: project.root.length }); },
+    createBin(name) { const b = { name, type: 2, items: [], get children() { return Object.assign(this.items.slice(), { numItems: this.items.length }); } }; project.root.push(b); return b; } };
   const app = { version: '25.1.0', path: appPath, enableQE() {}, project: { activeSequence: seq, rootItem, path: project.path, getInsertionBin: () => rootItem,
-    importFiles(paths) { paths.forEach(findOrMake); return true; } } };
+    importFiles(paths, suppress, bin, numbered) { paths.forEach((p) => findOrMake(p, bin, numbered)); return true; } } };
   const qe = { project: { getActiveSequence: () => qeSeq } };
   function File(p) { this.fsName = p; this.name = encodeURI(path.basename(p)); Object.defineProperty(this, 'exists', { get: () => fs.existsSync(p) }); this.parent = new Folder(path.dirname(p)); }
   function Folder(p) { this.fsName = p; this.name = encodeURI(path.basename(p)); Object.defineProperty(this, 'exists', { get: () => fs.existsSync(p) && fs.statSync(p).isDirectory() }); }

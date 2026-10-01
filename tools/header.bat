@@ -11,7 +11,7 @@ rem    1) Fayl oxiridagi plagin arxivini ajratib oladi va SHA-256 bilan
 rem       butunligini tekshiradi.
 rem    2) Plaginni %APPDATA%\Adobe\CEP\extensions\com.uzstudio.geminicut
 rem       papkasiga nusxalaydi.
-rem    3) HKCU\Software\Adobe\CSXS.9..12 da PlayerDebugMode=1 qo'yadi -
+rem    3) HKCU\Software\Adobe\CSXS.9..14 da PlayerDebugMode=1 qo'yadi -
 rem       Premiere imzolanmagan CEP panellarni yuklashi uchun kerak.
 rem
 rem  Ishlatish:
@@ -23,6 +23,13 @@ rem ==========================================================================
 set "GC_VERSION=@VERSION@"
 set "GC_SHA=@SHA256@"
 set "GC_SELF=%~f0"
+rem Fayl Windows qator oxirisiz (faqat LF) yuklangan bo'lsa (masalan GitHub'dan) - cmd.exe
+rem belgilarni (goto :label) topa olmaydi. Shunday bo'lsa CRLF bilan tuzatilgan nusxasi ishga tushiriladi.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = [IO.File]::ReadAllText($env:GC_SELF); if ($t.Contains([string][char]13)) { exit 0 }; $n = Join-Path $env:TEMP 'GeminiCut-Setup-fixed.bat'; [IO.File]::WriteAllText($n, $t.Replace([string][char]10, [string][char]13 + [char]10), [Text.Encoding]::ASCII); exit 3" >nul 2>&1
+if errorlevel 3 (
+    call "%TEMP%\GeminiCut-Setup-fixed.bat" %*
+    exit /b
+)
 set "GC_ID=com.uzstudio.geminicut"
 set "GC_EXT_ROOT=%APPDATA%\Adobe\CEP\extensions"
 set "GC_DEST=%GC_EXT_ROOT%\%GC_ID%"
@@ -56,7 +63,7 @@ if not defined GC_SILENT cls
 call :banner
 echo   Quyidagilar bajariladi:
 echo     - Plagin papkasi: %GC_DEST%
-echo     - Registry:       HKCU\Software\Adobe\CSXS.9-12  PlayerDebugMode = 1
+echo     - Registry:       HKCU\Software\Adobe\CSXS.9-14  PlayerDebugMode = 1
 echo     - Admin huquqi kerak emas, faqat joriy foydalanuvchi uchun.
 echo.
 call :listPremiere
@@ -105,14 +112,14 @@ echo         OK - %GC_DEST%
 
 echo   [3/4] Premiere ruxsati sozlanmoqda (registry)...
 set "GC_REGOK="
-for %%V in (9 10 11 12) do (
+for %%V in (9 10 11 12 13 14) do (
     reg add "HKCU\Software\Adobe\CSXS.%%V" /v PlayerDebugMode /t REG_SZ /d 1 /f >> "%GC_LOG%" 2>&1 && set "GC_REGOK=1"
 )
 if not defined GC_REGOK (
     call :err "Registry yozuvini qo'shib bo'lmadi."
     goto :fail
 )
-echo         OK - CSXS.9, 10, 11, 12
+echo         OK - CSXS.9 ... CSXS.14
 
 echo   [4/4] Vaqtinchalik fayllar tozalanmoqda...
 rd /s /q "%GC_WORK%" >nul 2>&1
@@ -127,7 +134,7 @@ echo     1. Premiere Pro'ni oching (ochiq bo'lsa - to'liq yopib qayta oching).
 echo     2. Window ^> Extensions ^> GeminiCut - AI Subtitr va Montaj
 echo     3. Sozlamalar bo'limiga Gemini API kalitingizni kiriting
 echo        (bepul: https://aistudio.google.com/apikey).
-echo     4. Claude bo'limi uchun: Anthropic API kalitini kiriting (ixtiyoriy).
+echo     4. ChatGPT va Claude bo'limlari uchun: OpenAI va Anthropic kalitlari (ixtiyoriy).
 echo     Qo'shimcha dastur (Node.js, npm va hokazo) o'rnatish SHART EMAS.
 echo.
 echo   Jurnal: %GC_LOG%
@@ -186,7 +193,7 @@ exit /b 0
 echo.
 echo   ==========================================================
 echo     GeminiCut %GC_VERSION%  -  AI subtitr va montaj
-echo     Adobe Premiere Pro 2022 / 2023 / 2024 / 2025
+echo     Adobe Premiere Pro 2022 - 2026
 echo   ==========================================================
 echo.
 exit /b 0

@@ -36,13 +36,15 @@ r.tl.ph = START + 8 * FPS;
 const REAL = fs.mkdtempSync(path.join(os.tmpdir(), 'gcr-e2e-'));
 const toReal = (p) => path.join(REAL, String(p).replace(/^([A-Za-z]):/, '$1'));
 const fromReal = (v) => JSON.parse(JSON.stringify(v).split(JSON.stringify(REAL).slice(1, -1)).join('').replace(/"\/([A-Za-z])\//g, '"$1:/'));
-const host = createHost(r.resolve, { fs, path, sleep: () => Promise.resolve() });
+const LUTS = fs.mkdtempSync(path.join(os.tmpdir(), 'gcr-lut-'));
+const host = createHost(r.resolve, { fs, path, sleep: () => Promise.resolve(), lutDir: LUTS });
 
 async function hostCall(fn, args) {
   const mapped = JSON.parse(JSON.stringify(args || []), (k, v) => (typeof v === 'string' && /^[A-Za-z]:\//.test(v) ? toReal(v) : v));
   const walk = (v) => (Array.isArray(v) ? v.forEach(walk) : typeof v === 'string' && v.startsWith(REAL) && fs.mkdirSync(path.dirname(v), { recursive: true }));
   walk(mapped);
   if (/^gc_(insertSound|importSrt|flowImport)$/.test(fn)) fs.writeFileSync(mapped[0], 'x');
+  if (fn === 'gc_importSequence') { const d = path.dirname(mapped[0]); for (let i = 0; i < mapped[1]; i++) fs.writeFileSync(path.join(d, 'gc_' + String(i).padStart(4, '0') + '.png'), 'x'); }
   return fromReal(await host[fn](...mapped));
 }
 
@@ -60,7 +62,7 @@ const ELECTRON = `(function () {
 })();`;
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   const page = await browser.newPage({ viewport: { width: 420, height: 900 }, deviceScaleFactor: 2 });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -136,6 +138,65 @@ const ELECTRON = `(function () {
   const withComp = nt.tracks.video[0].filter((it) => it.comps.length).length;
   check(withComp >= 1, 'Claude motion Fusion orqali qo\'llandi');
   await shot('r05-claude');
+
+  console.log('ChatGPT: rang berish');
+  await tab('chatgpt');
+  await page.waitForTimeout(300);
+  check(await page.isVisible('#gpColorPane') && !(await page.isVisible('#gpEditPane')), 'Resolve: rang berish bo\'limi ochiq');
+  await page.click('#gcScope [data-v="all"]');
+  await page.click('#gcCapture');
+  await page.waitForFunction(() => /klip tayyor|xato|topilmadi/i.test(document.getElementById('gcStatus').textContent), null, { timeout: 30000 }).catch(() => {});
+  const nClips = await page.$$eval('#gcClips .gc-clip', (e) => e.length);
+  check(nClips === nt.tracks.video[0].length, `yangi timeline'dagi ${nClips} ta klip tahlil qilindi: ` + await page.textContent('#gcStatus'));
+  check(!(await page.$eval('#gcStage', (e) => e.classList.contains('empty'))), 'oldin/keyin ko\'rinishi chizildi');
+  await page.click('.gc-preset[data-k="cinema"]');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => {
+    window.GCApplication.settings().openaiKey = 'sk-test';
+    window.GCAI.openai = async ({ content, schema }) => {
+      window.__gcContent = content;
+      return { summary: 'Kinematik teal & orange, teri ranglari iliq.', look: { exposure: 0, temperature: 0.1, tint: 0, contrast: 0.22, saturation: 1, vibrance: 0.1,
+        lift: [0, 0, 0.01], gamma: [0, 0, 0], gain: [0.02, 0, -0.02], shadow_hue: 195, shadow_amount: 0.5, highlight_hue: 32, highlight_amount: 0.35, fade: 0.01, highlight_rolloff: 0.3, monochrome: 0 },
+        clips: [{ index: 1, exposure: 0.2, temperature: 0, tint: 0, note: 'Biroz qorong\'i' }] };
+    };
+  });
+  await page.fill('#gcPrompt', 'Kinematik rang ber');
+  await page.click('#gcAsk');
+  await page.waitForFunction(() => !document.getElementById('gcSummary').hidden, null, { timeout: 15000 }).catch(async () => console.log('gcStatus:', await page.textContent('#gcStatus')));
+  check((await page.evaluate(() => (window.__gcContent || []).filter((b) => b.type === 'image').length)) === nClips, 'ChatGPT\'ga har bir klip kadri va statistikasi yuborildi');
+  check(await page.$eval('.gc-preset[data-k="ai"]', (e) => e.classList.contains('on')), 'ChatGPT ko\'rinishi tanlandi');
+  await page.fill('#gcAdj_saturation', '1.2');
+  await page.dispatchEvent('#gcAdj_saturation', 'input');
+  await page.evaluate(() => document.getElementById('gcStage').scrollIntoView({ block: 'start' }));
+  await page.waitForTimeout(300);
+  await shot('r06-chatgpt-rang');
+  await page.evaluate(() => document.getElementById('gcSliders').scrollIntoView({ block: 'start' }));
+  await shot('r06b-chatgpt-sozlash');
+  await page.click('#gcApply');
+  await page.waitForFunction(() => /rang berildi|qo'llanmadi/.test(document.getElementById('gcStatus').textContent), null, { timeout: 60000 }).catch(() => {});
+  const graded = nt.tracks.video[0].filter((it) => it.cur === 'GeminiCut AI' && it.luts['GeminiCut AI']);
+  check(graded.length === nClips, `${graded.length} ta klipga LUT "GeminiCut AI" versiyasida: ` + await page.textContent('#gcStatus'));
+  const cube = fs.readFileSync(graded[0].luts['GeminiCut AI'], 'utf8');
+  check(/LUT_3D_SIZE 33/.test(cube) && cube.trim().split('\n').length === 33 * 33 * 33 + 5, '.cube 33x33x33');
+  await page.click('#gcRevert');
+  await page.waitForTimeout(500);
+  check(nt.tracks.video[0].every((it) => it.cur === 'Version 1' && it.versions.length === 1), 'asl rangga qaytarildi: ' + await page.textContent('#gcStatus'));
+
+  console.log('Matn');
+  await tab('text');
+  await page.waitForTimeout(800);
+  await page.click('#txKind [data-v="3d"]');
+  await page.waitForTimeout(1500);
+  await page.click('.tx-card[data-id="jelly"]');
+  await page.fill('#txText', 'SALOM');
+  await page.evaluate(() => { const r = window.GCText.recipe(); r.duration = 1; window.GCText.setRecipe(r); });
+  await page.waitForTimeout(1200);
+  await shot('r07-matn-3d');
+  const before = nt.tracks.video.length;
+  await page.click('#txInsert');
+  await page.waitForFunction(() => /✓|XATO|qo'yilmadi|topilmadi/i.test(document.getElementById('txStatus').textContent), null, { timeout: 240000 }).catch(() => {});
+  const vt = nt.tracks.video[nt.tracks.video.length - 1];
+  check(nt.tracks.video.length === before + 1 && vt.length === 1 && vt[0].end - vt[0].start === 25 && /Matn/.test(vt[0].mpi.file), '3D jele matn yangi yuqori trekka (25 kadr): ' + await page.textContent('#txStatus'));
 
   console.log('Subtitr');
   await tab('subs');

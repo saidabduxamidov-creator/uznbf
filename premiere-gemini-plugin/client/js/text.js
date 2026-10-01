@@ -1,0 +1,295 @@
+/*
+ * GeminiCut - "Matn" bo'limi: shablon tanlash, jonli oldindan ko'rish, oddiy sozlamalar,
+ * timeline'ga qo'yish va keyin playhead'dagi matnni qayta tahrirlash.
+ */
+(function () {
+  "use strict";
+
+  const fs = require("fs");
+  const path = require("path");
+  const os = require("os");
+  const url = require("url");
+  const $ = (id) => document.getElementById(id);
+  const T = () => window.GCTextFX;
+  const LS = "geminicut.text.v1";
+
+  let R = null, kind = "2d", editing = null, busy = false, token = null;
+  let drawer = null, drawerKey = "", bgImage = null, playing = true, t0 = performance.now(), thumbsDone = {};
+
+  const ROOT = () => { const d = path.join(os.homedir(), "Documents", "GeminiCut", "Matn"); fs.mkdirSync(d, { recursive: true }); return d; };
+  const status = (t, err) => { const el = $("txStatus"); el.textContent = t; el.classList.toggle("error", !!err); };
+
+  function load() {
+    try { R = Object.assign({}, T().DEFAULT, JSON.parse(localStorage.getItem(LS) || "null") || {}); } catch (e) { R = Object.assign({}, T().DEFAULT); }
+    kind = T().is3D(R) ? "3d" : "2d";
+  }
+  function save() { try { localStorage.setItem(LS, JSON.stringify(R)); } catch (e) { /* e'tiborsiz */ } }
+
+  function frameSize() {
+    const s = window.GCApplication.sequence() || {};
+    return { W: s.width || 1920, H: s.height || 1080, fps: s.fps || 25 };
+  }
+
+  /* ---------------- shablonlar to'ri ---------------- */
+
+  function renderGrid() {
+    const box = $("txGrid");
+    box.innerHTML = "";
+    T().TEMPLATES.filter((t) => t.kind === kind).forEach((tp) => {
+      const b = document.createElement("button");
+      b.className = "tx-card" + (R.template === tp.id ? " on" : "");
+      b.dataset.id = tp.id;
+      b.title = tp.desc;
+      const c = document.createElement("canvas");
+      c.width = 192; c.height = 108;
+      const n = document.createElement("span");
+      n.textContent = tp.name;
+      b.append(c, n);
+      b.addEventListener("click", () => pickTemplate(tp.id));
+      box.appendChild(b);
+    });
+    requestAnimationFrame(drawThumbs);
+  }
+
+  let thumb3d = null;
+  function drawThumbs() {
+    document.querySelectorAll("#txGrid .tx-card").forEach((b) => {
+      const id = b.dataset.id, c = b.querySelector("canvas");
+      if (thumbsDone[id]) { c.getContext("2d").drawImage(thumbsDone[id], 0, 0); return; }
+      const tp = T().byId(id);
+      const rec = T().recipeFor(id, { text: tp.kind === "3d" ? "3D" : id === "lowerthird" ? "Ism Familiya" : "MATN", sub: "Lavozim", duration: 3, size: tp.kind === "3d" ? 0.42 : id === "lowerthird" ? 0.12 : 0.24, x: id === "lowerthird" ? 0.1 : 0.5, y: id === "lowerthird" ? 0.55 : 0.5 });
+      const off = document.createElement("canvas"); off.width = 192; off.height = 108;
+      try {
+        if (tp.kind === "3d") {
+          if (!thumb3d) { const cv = document.createElement("canvas"); cv.width = 192; cv.height = 108; thumb3d = { cv, r: new (T().Renderer3D)(cv) }; }
+          thumb3d.r.draw(rec, 1.6);
+          off.getContext("2d").drawImage(thumb3d.cv, 0, 0);
+        } else {
+          T().draw2D(off, rec, id === "kinetic" ? 2.2 : 1.4);
+        }
+      } catch (e) { /* WebGL yo'q - bo'sh karta */ }
+      thumbsDone[id] = off;
+      c.getContext("2d").drawImage(off, 0, 0);
+    });
+  }
+
+  function pickTemplate(id) {
+    const prev = R, tp = T().byId(id);
+    R = T().recipeFor(id, { duration: prev.duration, speed: prev.speed });
+    // foydalanuvchi yozgan matn saqlanadi (shablonning namuna matni faqat standart matn o'rniga)
+    if (prev.text && (prev.text !== T().DEFAULT.text || !(tp.set && tp.set.text))) R.text = prev.text;
+    if (prev.sub) R.sub = prev.sub;
+    save();
+    syncControls();
+    document.querySelectorAll("#txGrid .tx-card").forEach((b) => b.classList.toggle("on", b.dataset.id === id));
+    t0 = performance.now();
+  }
+
+  function setKind(k) {
+    kind = k;
+    document.querySelectorAll("#txKind button").forEach((b) => b.classList.toggle("on", b.dataset.v === k));
+    document.querySelectorAll("#view-text [data-kind]").forEach((el) => { el.hidden = el.dataset.kind !== k; });
+    if (T().byId(R.template).kind !== k) pickTemplate(T().TEMPLATES.find((t) => t.kind === k).id);
+    renderGrid();
+  }
+
+  /* ---------------- sozlamalar ---------------- */
+
+  const BIND = [
+    ["txText", "text", "value"], ["txSub", "sub", "value"], ["txFont", "font", "value"], ["txUpper", "upper", "checked"],
+    ["txColor", "color", "value"], ["txColor2", "color2", "value"], ["txAccent", "accent", "value"],
+    ["txSize", "size", "num"], ["txSpacing", "spacing", "num"], ["txShadow", "shadow", "num"], ["txStroke", "stroke", "num"], ["txGlow", "glow", "num"],
+    ["txMaterial", "material", "value"], ["txLiquid", "liquid", "num"], ["txFlow", "flow", "num"], ["txDepth", "depth", "num"], ["txRot", "rot", "num"],
+    ["txBevel", "bevel", "num"], ["txDrops", "drops", "checked"], ["txX", "x", "num"], ["txY", "y", "num"], ["txDur", "duration", "num"], ["txSpeed", "speed", "num"],
+  ];
+
+  function syncControls() {
+    BIND.forEach(([id, key, prop]) => { const el = $(id); if (!el) return; if (prop === "checked") el.checked = !!R[key]; else el.value = R[key]; });
+    document.querySelectorAll("#txWeight button").forEach((b) => b.classList.toggle("on", Number(b.dataset.v) === Number(R.weight) || (Number(b.dataset.v) === 700 && R.weight >= 600 && R.weight < 850) || (Number(b.dataset.v) === 900 && R.weight >= 850)));
+    $("txSubWrap").hidden = R.template !== "lowerthird";
+    $("txSizeVal").textContent = Math.round(R.size * 1000) / 10 + "%";
+    $("txDurVal").textContent = Number(R.duration).toFixed(1) + "s";
+    document.querySelectorAll("#txPos button").forEach((b) => b.classList.toggle("on", Math.abs(Number(b.dataset.x) - R.x) < 0.02 && Math.abs(Number(b.dataset.y) - R.y) < 0.02));
+  }
+
+  function onControl(id, key, prop) {
+    const el = $(id);
+    el.addEventListener(prop === "checked" || el.tagName === "SELECT" ? "change" : "input", () => {
+      R[key] = prop === "checked" ? el.checked : prop === "num" ? Number(el.value) : el.value;
+      if (key === "material") R.drops = R.drops; // material o'zgarsa ham shablon qoladi
+      save(); syncControls();
+    });
+  }
+
+  /* ---------------- oldindan ko'rish ---------------- */
+
+  function ensureDrawer() {
+    const { W, H } = frameSize();
+    const k = Math.min(1, 560 / Math.max(W, H));
+    const w = Math.max(16, Math.round(W * k)), h = Math.max(16, Math.round(H * k));
+    const key = [w, h, T().is3D(R)].join("|");
+    if (drawer && drawerKey === key) return drawer;
+    try { drawer = T().makeDrawer(w, h, R); drawerKey = key; } catch (e) { drawer = null; drawerKey = ""; status(e.message, true); }
+    const cv = $("txPreview");
+    cv.width = w; cv.height = h;
+    return drawer;
+  }
+
+  function tick() {
+    requestAnimationFrame(tick);
+    if (!$("view-text").classList.contains("active")) return;
+    const d = ensureDrawer();
+    if (!d) return;
+    const D = Math.max(0.5, R.duration);
+    let t;
+    if (playing) { t = ((performance.now() - t0) / 1000) % (D + 0.6); if (t > D) t = D; $("txScrub").value = Math.round((t / D) * 1000); }
+    else t = (Number($("txScrub").value) / 1000) * D;
+    $("txTime").textContent = t.toFixed(1) + "s";
+    try { d.draw(R, t); } catch (e) { return; }
+    const cv = $("txPreview"), ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (bgImage) ctx.drawImage(bgImage, 0, 0, cv.width, cv.height);
+    ctx.drawImage(d.canvas, 0, 0);
+  }
+
+  async function grabBackground() {
+    try {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gc-txbg-"));
+      const seq = window.GCApplication.sequence() || {};
+      const r = await window.GCHost.call("gc_exportFrames", [path.join(dir, "bg"), [seq.playhead || 0]], 60000);
+      if (!r.files.length) throw new Error("Kadr olinmadi");
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error("Kadr o'qilmadi")); const href = url.pathToFileURL(r.files[0]).href; img.src = /^file:/.test(href) ? href + "?t=" + Date.now() : href; });
+      bgImage = img;
+      status("Fon: playhead'dagi kadr.");
+    } catch (e) { status("Fon kadri olinmadi: " + e.message, true); }
+  }
+
+  /* ---------------- timeline'ga qo'yish / tahrirlash ---------------- */
+
+  function slug(s) { return String(s || "matn").toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 24) || "matn"; }
+  function stamp() { const d = new Date(), p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
+
+  async function insert() {
+    if (busy) return;
+    if (!String(R.text || "").trim()) return status("Matnni yozing.", true);
+    if (!window.GCHost.available) return status("Panel muharrir ichida ochilishi kerak.", true);
+    busy = true; token = window.GCGemini.createCancelToken();
+    setBusy(true);
+    try {
+      let seq = window.GCApplication.sequence();
+      if (!seq || !seq.width) seq = await window.GCHost.call("gc_getSequenceInfo", [], 20000);
+      const W = seq.width || 1920, H = seq.height || 1080, fps = seq.fps || 25;
+      const dir = path.join(ROOT(), `${stamp()}_${R.template}_${slug(R.text)}`);
+      const n = Math.max(1, Math.round(R.duration * fps));
+      status(`Kadrlar chizilmoqda… 0/${n}`);
+      const out = await T().render(R, dir, { width: W, height: H, fps, token,
+        onProgress: (i, total) => { $("txBar").style.width = Math.round((i / total) * 100) + "%"; $("txProgLabel").textContent = `${i}/${total}`; status(`Kadrlar chizilmoqda… ${i}/${total}`); } });
+      status("Timeline'ga qo'yilmoqda…");
+      const name = `Matn · ${T().byId(R.template).name} · ${String(R.text).split(/\n/)[0].slice(0, 24)}`;
+      const r = await window.GCHost.call("gc_importSequence", [out.first, out.count, fps, -1, editing, name], 180000);
+      status(`✓ ${editing ? "Matn yangilandi" : "Matn qo'yildi"}: V${r.track + 1}, ${window.GCSubs.formatClock(r.seconds)} (${out.count} kadr).`);
+      stopEditing();
+      window.GCApplication.timelineChanged();
+    } catch (e) {
+      status(e.code === "CANCELLED" ? "Bekor qilindi." : e.message, e.code !== "CANCELLED");
+    } finally {
+      busy = false; token = null; setBusy(false);
+    }
+  }
+
+  async function editAtPlayhead() {
+    try {
+      const r = await window.GCHost.call("gc_textAtPlayhead", [], 20000);
+      const file = path.join(path.dirname(r.path), "recipe.json");
+      if (!fs.existsSync(file)) throw new Error("Bu matnning sozlamalari (recipe.json) topilmadi.");
+      const rec = JSON.parse(fs.readFileSync(file, "utf8"));
+      ["width", "height", "fps", "frames"].forEach((k) => delete rec[k]);
+      R = Object.assign({}, T().DEFAULT, rec);
+      save();
+      editing = { track: r.track, start: r.start };
+      setKind(T().is3D(R) ? "3d" : "2d");
+      syncControls();
+      $("txInsert").querySelector("span").textContent = "Yangilash (almashtirish)";
+      $("txStopEdit").hidden = false;
+      status(`Tahrirlanmoqda: V${r.track + 1}, ${window.GCSubs.formatClock(r.start)}. O'zgartiring va “Yangilash” ni bosing.`);
+    } catch (e) { status(e.message, true); }
+  }
+
+  function stopEditing() {
+    editing = null;
+    $("txInsert").querySelector("span").textContent = "Timeline'ga qo'yish";
+    $("txStopEdit").hidden = true;
+  }
+
+  function setBusy(on) {
+    ["txInsert", "txEdit", "txAI"].forEach((id) => { $(id).disabled = on; });
+    $("txProgress").hidden = !on;
+    if (!on) $("txBar").style.width = "0%";
+  }
+
+  /* ---------------- AI yordamchi ---------------- */
+
+  async function askAI() {
+    const q = $("txAsk").value.trim();
+    if (!q) return status("AI uchun topshiriq yozing.", true);
+    const btn = $("txAI");
+    btn.disabled = true;
+    status("AI matn va uslubni tanlamoqda…");
+    try {
+      const ids = T().TEMPLATES.map((t) => t.id);
+      const tr = (window.GCApplication.transcript() || []).filter((s) => s.type === "speech").map((s) => s.text).join(" ").slice(0, 1500);
+      const r = await window.GCAI.text({
+        settings: window.GCApplication.settings(),
+        system: "You design animated titles for short videos. Pick one template id and write the on-screen text (max 6 words per line, max 2 lines) in the user's language. Colours as #rrggbb with strong contrast for video.",
+        prompt: `Templates: ${T().TEMPLATES.map((t) => `${t.id} (${t.kind}, ${t.desc})`).join("; ")}\n` + (tr ? `Video speech: ${tr}\n` : "") + `Request: ${q}`,
+        schema: { type: "object", properties: {
+          template: { type: "string", enum: ids }, text: { type: "string" }, sub: { type: "string", description: "Second line for lowerthird, else empty." },
+          color: { type: "string" }, color2: { type: "string" }, accent: { type: "string" } } },
+        effort: "low",
+      });
+      const hex = (v, d) => (/^#[0-9a-f]{6}$/i.test(v || "") ? v : d);
+      R = T().recipeFor(r.template, { text: r.text, sub: r.sub || "", duration: R.duration, speed: R.speed });
+      R.color = hex(r.color, R.color); R.color2 = hex(r.color2, R.color2); R.accent = hex(r.accent, R.accent);
+      save();
+      setKind(T().is3D(R) ? "3d" : "2d");
+      syncControls();
+      t0 = performance.now();
+      status("AI tanladi: " + T().byId(R.template).name + ". Kerak bo'lsa sozlang va timeline'ga qo'ying.");
+    } catch (e) { status(e.message, true); } finally { btn.disabled = false; }
+  }
+
+  /* ---------------- ishga tushirish ---------------- */
+
+  function init() {
+    load();
+    const fonts = $("txFont");
+    T().FONTS.forEach((f) => { const o = document.createElement("option"); o.value = f; o.textContent = f; o.style.fontFamily = f; fonts.appendChild(o); });
+    if (!T().FONTS.includes(R.font)) { const o = document.createElement("option"); o.value = R.font; o.textContent = R.font; fonts.appendChild(o); }
+    BIND.forEach(([id, key, prop]) => { if ($(id)) onControl(id, key, prop); });
+    document.querySelectorAll("#txWeight button").forEach((b) => b.addEventListener("click", () => { R.weight = Number(b.dataset.v); save(); syncControls(); }));
+    document.querySelectorAll("#txPos button").forEach((b) => b.addEventListener("click", () => {
+      R.x = Number(b.dataset.x); R.y = Number(b.dataset.y);
+      R.align = R.template === "lowerthird" ? "left" : "center";
+      save(); syncControls();
+    }));
+    document.querySelectorAll("#txKind button").forEach((b) => b.addEventListener("click", () => setKind(b.dataset.v)));
+    $("txPlay").addEventListener("click", () => { playing = !playing; $("txPlay").textContent = playing ? "❚❚" : "▶"; if (playing) t0 = performance.now() - (Number($("txScrub").value) / 1000) * R.duration * 1000; });
+    $("txScrub").addEventListener("input", () => { playing = false; $("txPlay").textContent = "▶"; });
+    $("txBg").addEventListener("click", () => { if (bgImage) { bgImage = null; status("Fon o'chirildi."); } else grabBackground(); });
+    $("txInsert").addEventListener("click", insert);
+    $("txEdit").addEventListener("click", editAtPlayhead);
+    $("txStopEdit").addEventListener("click", () => { stopEditing(); status(""); });
+    $("txCancel").addEventListener("click", () => { if (token) token.cancel(); });
+    $("txAI").addEventListener("click", askAI);
+    $("txFolder").addEventListener("click", () => {
+      const d = ROOT();
+      try { require("child_process").spawn(process.platform === "win32" ? "explorer.exe" : "open", [d], { detached: true, stdio: "ignore" }).unref(); } catch (e) { status(d); }
+    });
+    setKind(kind);
+    syncControls();
+    requestAnimationFrame(tick);
+  }
+
+  window.GCText = { init, recipe: () => R, setRecipe: (r) => { R = Object.assign({}, T().DEFAULT, r); syncControls(); }, insert, editAtPlayhead, setKind };
+})();

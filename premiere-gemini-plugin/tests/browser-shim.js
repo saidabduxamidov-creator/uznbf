@@ -11,6 +11,7 @@
         if (enc === "hex") { const b = new Buf(v.length / 2); for (let i = 0; i < b.length; i++) b[i] = parseInt(v.substr(i * 2, 2), 16); return b; }
         const u = new TextEncoder().encode(v); const b = new Buf(u.length); b.set(u); return b;
       }
+      if (v instanceof ArrayBuffer) v = new Uint8Array(v);
       const b = new Buf(v.length); b.set(v); return b;
     }
     static concat(list) { const n = list.reduce((a, b) => a + b.length, 0); const out = new Buf(n); let o = 0; list.forEach((b) => { out.set(b, o); o += b.length; }); return out; }

@@ -41,7 +41,7 @@
       srcLang: "auto", outLang: "same", maxChars: 42, maxLines: 2, range: "all", glossary: "",
       letterCase: "original", punctuation: "keep", autoCaption: false, pauses: true, pause: 0.8, retakes: true, zoom: false, zoomPower: 115, presetPath: "",
       punct: { comma: true, period: true, excl: true, colon: true, quotes: true, apos: true, dash: true, ellipsis: true },
-      claudeKey: "", textAI: "auto", keyBase: "media", motionStrength: 115 };
+      claudeKey: "", textAI: "auto", keyBase: "media", motionStrength: 115, openaiKey: "", openaiModel: "" };
     let s = def;
     try { s = Object.assign(def, JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}")); } catch (e) { /* standart */ }
     // 3.2 dagi "punctuation: remove" -> yangi format
@@ -831,6 +831,26 @@ ${lines}`;
     }
   }
 
+  async function onTestOpenai() {
+    const btn = $("btnTestOpenai");
+    if (!state.settings.openaiKey) return toast("ChatGPT (OpenAI) kalitini kiriting.", "err");
+    btn.disabled = true;
+    btn.textContent = "Tekshirilmoqda...";
+    try {
+      const m = await window.GCAI.testOpenAI(state.settings.openaiKey);
+      const list = $("openaiModels");
+      list.innerHTML = "";
+      m.ids.filter((id) => /^(gpt|o\d|chatgpt)/.test(id)).forEach((id) => { const o = document.createElement("option"); o.value = id; list.appendChild(o); });
+      toast(`ChatGPT kaliti ishlayapti (${state.settings.openaiModel || m.best}).`);
+      $("gpModelChip").textContent = state.settings.openaiModel || m.best;
+    } catch (e) {
+      toast(e.message, "err");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "ChatGPT kalitini tekshirish";
+    }
+  }
+
   /* Tezkor motion presetlari - tanlangan klip(lar) yoki playhead ostidagi klip */
   async function onPreset(name, btn) {
     if (state.busy) return;
@@ -959,6 +979,11 @@ ${lines}`;
     $("toggleClaudeKey").addEventListener("click", () => { const k = $("claudeKey"); k.type = k.type === "password" ? "text" : "password"; });
     $("getClaudeKey").addEventListener("click", (e) => { e.preventDefault(); GCHost.openUrl("https://console.anthropic.com/settings/keys"); });
     $("btnTestClaude").addEventListener("click", onTestClaude);
+    bindInput("openaiKey", "openaiKey", { event: "input", cast: (v) => v.trim() });
+    bindInput("openaiModel", "openaiModel", { event: "change", cast: (v) => v.trim(), onChange: () => { $("gpModelChip").textContent = state.settings.openaiModel || "GPT · avto"; } });
+    $("toggleOpenaiKey").addEventListener("click", () => { const k = $("openaiKey"); k.type = k.type === "password" ? "text" : "password"; });
+    $("getOpenaiKey").addEventListener("click", (e) => { e.preventDefault(); GCHost.openUrl("https://platform.openai.com/api-keys"); });
+    $("btnTestOpenai").addEventListener("click", onTestOpenai);
     bindSegmented("motionStrength", "motionStrength", Number);
     document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => onPreset(b.dataset.preset, b)));
     $("btnResetMotion").addEventListener("click", onResetMotion);
@@ -1023,7 +1048,7 @@ ${lines}`;
     copyText,
   };
   init();
-  ["GCLibrary", "GCNotes", "GCClaude", "GCFlow"].forEach((m) => {
+  ["GCLibrary", "GCNotes", "GCClaude", "GCChatGPT", "GCText", "GCFlow"].forEach((m) => {
     try { if (window[m]) window[m].init(); } catch (e) { log(m + " ishga tushmadi: " + e.message); }
   });
   document.querySelectorAll('.tab').forEach(t => t.addEventListener('keydown', e => {

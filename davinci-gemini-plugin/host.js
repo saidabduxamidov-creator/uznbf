@@ -9,10 +9,13 @@
  *  - Keyframe: Fusion kompozitsiyasi (Transform + BrightnessContrast) Lua orqali.
  *  - Blade/ripple kesish: pauzalarsiz YANGI timeline yaratiladi, asl timeline saqlanadi.
  *  - Klip tanlash (selection): playhead ostidagi klip ishlatiladi.
+ *  - Rang berish: plagin hisoblagan .cube LUT klipning 1-node'iga, alohida "GeminiCut AI"
+ *    rang versiyasida qo'yiladi (asl grade saqlanadi).
+ *  - Animatsion matn: plagin chizgan PNG ketma-ketligi import qilinib, yuqori trekka qo'yiladi.
  */
 "use strict";
 
-const VERSION = "4.1.0";
+const VERSION = "4.2.0";
 const BIN = "GeminiCut";
 
 function pad(n) { return String(n).padStart(2, "0"); }
@@ -157,8 +160,12 @@ function createHost(resolve, deps) {
     return null;
   }
 
-  async function itemPath(it) {
-    try { const mpi = await it.GetMediaPoolItem(); return mpi ? String(await mpi.GetClipProperty("File Path") || "").toLowerCase() : ""; } catch (e) { return ""; }
+  async function itemPath(it, keepCase) {
+    try {
+      const mpi = await it.GetMediaPoolItem();
+      const p = mpi ? String(await mpi.GetClipProperty("File Path") || "") : "";
+      return keepCase ? p : p.toLowerCase();
+    } catch (e) { return ""; }
   }
 
   async function sourceStart(it) {
@@ -262,6 +269,59 @@ function createHost(resolve, deps) {
   }
 
   /* ---------------- panel chaqiradigan funksiyalar ---------------- */
+
+  /* ---------------- rang va matn yordamchilari ---------------- */
+
+  const AI_VERSION = "GeminiCut AI";
+  state.origVersion = {};
+
+  function lutDir() {
+    if (deps.lutDir) return deps.lutDir;
+    if (process.platform === "darwin") return "/Library/Application Support/Blackmagic Design/DaVinci Resolve/LUT/GeminiCut";
+    return path.join(process.env.PROGRAMDATA || "C:\\ProgramData", "Blackmagic Design", "DaVinci Resolve", "Support", "LUT", "GeminiCut");
+  }
+
+  const safeName = (s) => String(s || "clip").replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 40) || "clip";
+
+  async function findItemById(e, id) {
+    const nv = await e.tl.GetTrackCount("video");
+    for (let v = 1; v <= nv; v++) {
+      for (const it of await items(e, "video", v)) if (String(await it.GetUniqueId()) === String(id)) return it;
+    }
+    return null;
+  }
+
+  /* Klip GeminiCut AI versiyasida bo'lsa - asl versiyasini eslab qolib, unga qaytaradi */
+  async function ensureOriginalVersion(it, id) {
+    if (typeof it.GetCurrentVersion !== "function") return;
+    const cur = await it.GetCurrentVersion();
+    if (cur && cur.versionName && cur.versionName !== AI_VERSION) { state.origVersion[id] = cur; return; }
+    if (cur && cur.versionName === AI_VERSION) {
+      const orig = state.origVersion[id] || { versionName: "Version 1", versionType: 0 };
+      await it.LoadVersionByName(orig.versionName, orig.versionType);
+    }
+  }
+
+  async function isTextItem(it) {
+    if (!it) return false;
+    return /geminicut[\\/]+matn[\\/]/i.test(await itemPath(it, true));
+  }
+
+  /* Matn uchun video trek: o'sha vaqtdagi barcha kliplardan yuqorida, bo'sh va qulflanmagan; bo'lmasa yangi trek */
+  async function overlayTrack(e, from, to) {
+    const nv = await e.tl.GetTrackCount("video");
+    const busy = async (v) => {
+      for (const it of await items(e, "video", v)) { const a = await it.GetStart(), b = await it.GetEnd(); if (a < to && b > from) return true; }
+      return false;
+    };
+    let top = 0;
+    for (let v = 1; v <= nv; v++) if (await busy(v)) top = v;
+    for (let v = top + 1; v <= nv; v++) if (!(await e.tl.GetIsTrackLocked("video", v)) && !(await busy(v))) return v;
+    await e.tl.AddTrack("video");
+    const n2 = await e.tl.GetTrackCount("video");
+    if (n2 <= nv) throw new Error("Yangi video trek yaratilmadi.");
+    return n2;
+  }
 
   const api = {
     async gc_ping() {
@@ -574,6 +634,147 @@ function createHost(resolve, deps) {
       const placed = await e.mp.AppendToTimeline([{ mediaPoolItem: mpi, startFrame: 0, endFrame: frames - 1, trackIndex: idx, recordFrame: rec, mediaType: 1 }]);
       if (!placed || !placed.length) throw new Error("Video timeline'ga qo'yilmadi. MP4 Media Pool'da (GeminiCut → AI Video).");
       return { track: idx, seconds: sec(e, rec), name: path.basename(file) };
+    },
+
+    /* ---------------- rang berish (ChatGPT) ---------------- */
+
+    /*
+     * Rang beriladigan kliplar. scope: "playhead" | "track" (playhead klipining treki) | "all".
+     * Media'siz elementlar (titrlar, generatorlar) va GeminiCut matnlari o'tkazib yuboriladi.
+     * GeminiCut AI versiyasi yoqilgan klip tahlil oldidan asl versiyasiga qaytariladi.
+     */
+    async gc_colorTargets(scope) {
+      const e = await env();
+      const ph = await playheadFrame(e);
+      const nv = await e.tl.GetTrackCount("video");
+      let tracks = [];
+      let phTrack = 0;
+      for (let v = nv; v >= 1 && !phTrack; v--) if (await itemAt(e, "video", v, ph) && !(await isTextItem(await itemAt(e, "video", v, ph)))) phTrack = v;
+      if (scope === "all") for (let v = 1; v <= nv; v++) tracks.push(v);
+      else tracks = [phTrack || 1];
+      const clips = [];
+      for (const v of tracks) {
+        if (!(await e.tl.GetIsTrackEnabled("video", v))) continue;
+        for (const it of await items(e, "video", v)) {
+          const a = await it.GetStart(), b = await it.GetEnd();
+          if (scope === "playhead" && !(a <= ph && b > ph)) continue;
+          const mpi = await it.GetMediaPoolItem();
+          if (!mpi || (await isTextItem(it))) continue;
+          const id = String(await it.GetUniqueId());
+          await ensureOriginalVersion(it, id);
+          clips.push({ id, name: await it.GetName(), track: v - 1, start: sec(e, a), end: sec(e, b) });
+        }
+      }
+      if (!clips.length) throw new Error(scope === "playhead" ? "Playhead ostida video klip yo'q." : "Rang beriladigan video klip topilmadi.");
+      clips.sort((x, y) => x.track - y.track || x.start - y.start);
+      return { clips, playhead: sec(e, ph), lutDir: lutDir() };
+    },
+
+    /*
+     * Klipga LUT qo'yadi. item: { id, name, cube (matn), cdl }. opts.version - alohida "GeminiCut AI"
+     * rang versiyasi yaratiladi (asl grade saqlanadi, istalgan payt qaytarish mumkin).
+     */
+    async gc_applyGrade(item, opts) {
+      const e = await env();
+      const it = await findItemById(e, item.id);
+      if (!it) throw new Error("Klip topilmadi (timeline o'zgargan bo'lishi mumkin).");
+      const o = opts || {};
+      let versioned = false;
+      if (o.version !== false && typeof it.AddVersion === "function") {
+        const id = String(item.id);
+        await ensureOriginalVersion(it, id);
+        await it.AddVersion(AI_VERSION, 0);
+        versioned = !!(await it.LoadVersionByName(AI_VERSION, 0));
+      }
+      // LUT faylini Resolve'ning LUT papkasiga yozamiz (o'rnatuvchi unga ruxsat beradi)
+      const dir = lutDir();
+      const file = path.join(dir, `GC_${safeName(item.name)}_${Date.now().toString(36)}.cube`);
+      let wrote = false;
+      try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, item.cube); wrote = true; } catch (err) { /* ruxsat yo'q - CDL ga o'tamiz */ }
+      let mode = "";
+      if (wrote) {
+        try { await e.project.RefreshLUTList(); } catch (err) { /* eski versiya */ }
+        const rel = path.join(path.basename(dir), path.basename(file));
+        const graph = typeof it.GetNodeGraph === "function" ? await it.GetNodeGraph() : null;
+        for (const p of [file, rel]) {
+          if (graph && typeof graph.SetLUT === "function" && (await graph.SetLUT(1, p))) { mode = "lut"; break; }
+          if (typeof it.SetLUT === "function" && (await it.SetLUT(1, p))) { mode = "lut"; break; }
+        }
+      }
+      if (!mode && item.cdl && typeof it.SetCDL === "function") {
+        if (await it.SetCDL(Object.assign({ NodeIndex: "1" }, item.cdl))) mode = "cdl";
+      }
+      if (!mode) {
+        throw new Error(wrote ? "Resolve LUT'ni qabul qilmadi. Color sahifasini bir marta ochib, qayta urinib ko'ring."
+          : "LUT papkasiga yozib bo'lmadi: " + dir + ". GeminiCut-Resolve-Setup.bat ni qayta ishga tushiring.");
+      }
+      return { mode, versioned, lut: wrote ? file : "" };
+    },
+
+    /* GeminiCut rang versiyasini olib tashlab, klipni asl versiyasiga qaytaradi */
+    async gc_revertGrade(ids) {
+      const e = await env();
+      let reverted = 0;
+      for (const id of ids || []) {
+        const it = await findItemById(e, id);
+        if (!it || typeof it.LoadVersionByName !== "function") continue;
+        const orig = state.origVersion[id] || { versionName: "Version 1", versionType: 0 };
+        if (await it.LoadVersionByName(orig.versionName, orig.versionType)) {
+          if (typeof it.DeleteVersionByName === "function") await it.DeleteVersionByName(AI_VERSION, 0);
+          reverted++;
+        }
+      }
+      return { reverted };
+    },
+
+    /* ---------------- animatsion matn (PNG ketma-ketligi) ---------------- */
+
+    /*
+     * gc_0000.png ... ketma-ketligini Media Pool'ga (GeminiCut > Matn) import qilib, kerakli joyga qo'yadi.
+     * at < 0 -> playhead. replace = { track, start } bo'lsa - o'sha joydagi eski matn almashtiriladi.
+     */
+    async gc_importSequence(first, count, fps, at, replace, name) {
+      const e = await env();
+      const m = /^(.*?)(\d+)(\.png)$/i.exec(String(first));
+      if (!m || !fs.existsSync(first)) throw new Error("Kadrlar topilmadi: " + first);
+      const folder = await bin(e, "Matn");
+      await e.mp.SetCurrentFolder(folder);
+      const startIdx = Number(m[2]);
+      const list = await e.mp.ImportMedia([{ FilePath: m[1] + "%0" + m[2].length + "d" + m[3], StartIndex: startIdx, EndIndex: startIdx + count - 1 }]);
+      if (!list || !list.length) throw new Error("PNG ketma-ketligi import qilinmadi.");
+      const mpi = list[0];
+      try { if (name && typeof mpi.SetClipProperty === "function") await mpi.SetClipProperty("Clip Name", name); } catch (err) { /* ixtiyoriy */ }
+      let frames = await clipFrames(e, mpi);
+      if (!(frames > 1)) frames = count;
+      let rec = at >= 0 ? frameAt(e, at) : await playheadFrame(e);
+      let idx;
+      if (replace && replace.track >= 0) {
+        idx = replace.track + 1;
+        const old = await itemAt(e, "video", idx, frameAt(e, replace.start) + 1);
+        if (old) {
+          rec = await old.GetStart();
+          if (typeof e.tl.DeleteClips !== "function" || !(await e.tl.DeleteClips([old], false))) throw new Error("Eski matnni o'chirib bo'lmadi. Uni qo'lda o'chiring.");
+        }
+      } else {
+        idx = await overlayTrack(e, rec, rec + frames);
+      }
+      const placed = await e.mp.AppendToTimeline([{ mediaPoolItem: mpi, startFrame: 0, endFrame: frames - 1, trackIndex: idx, recordFrame: rec, mediaType: 1 }]);
+      if (!placed || !placed.length) throw new Error("Matn timeline'ga qo'yilmadi. U Media Pool'da (GeminiCut → Matn).");
+      return { track: idx - 1, seconds: sec(e, rec), duration: frames / e.fps };
+    },
+
+    /* Playhead ostidagi GeminiCut matni (tahrirlash uchun) */
+    async gc_textAtPlayhead() {
+      const e = await env();
+      const ph = await playheadFrame(e);
+      const nv = await e.tl.GetTrackCount("video");
+      for (let v = nv; v >= 1; v--) {
+        const it = await itemAt(e, "video", v, ph);
+        if (it && (await isTextItem(it))) {
+          return { track: v - 1, start: sec(e, await it.GetStart()), end: sec(e, await it.GetEnd()), path: await itemPath(it, true) };
+        }
+      }
+      throw new Error("Playhead ostida GeminiCut matni yo'q. Playhead'ni matn ustiga qo'ying.");
     },
   };
 

@@ -39,6 +39,9 @@ function runScript(script) {
   // Import qilinadigan fayllar haqiqiy diskda ham bo'lishi kerak
   if (/^gc_(insertSound|importSrt|flowImport)/.test(script) && paths[0]) { fs.mkdirSync(path.dirname(toReal(paths[0])), { recursive: true }); fs.writeFileSync(toReal(paths[0]), 'x'); }
   paths.forEach((p) => fs.mkdirSync(path.dirname(toReal(p)), { recursive: true }));
+  // Matn: PNG ketma-ketligi haqiqiy diskda ham bo'lsin (host kadrlar sonini papkadan oladi)
+  const seqm = /^gc_importSequence\("[^"]*",(\d+),/.exec(script);
+  if (seqm && paths[0]) { const d = path.dirname(toReal(paths[0])); fs.readdirSync(d).filter((n) => /^gc_\d+\.png$/.test(n)).forEach((n) => fs.unlinkSync(path.join(d, n))); for (let i = 0; i < Number(seqm[1]); i++) fs.writeFileSync(path.join(d, 'gc_' + String(i).padStart(4, '0') + '.png'), 'x'); }
   paths.filter((p) => /\.epr$/i.test(p)).forEach((p) => fs.writeFileSync(toReal(p), 'x'));
   const names = Object.keys(host.api);
   try { return fromReal(new Function(...names, 'return ' + script)(...names.map((n) => host.api[n]))); }
@@ -49,7 +52,7 @@ function runScript(script) {
 const SHIM = fs.readFileSync(path.join(__dirname, 'browser-shim.js'), 'utf8');
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   const page = await browser.newPage({ viewport: { width: 420, height: 900 }, deviceScaleFactor: 2 });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -135,6 +138,63 @@ const SHIM = fs.readFileSync(path.join(__dirname, 'browser-shim.js'), 'utf8');
   check(a2.items.length === 2, 'Claude SFX qo\'shildi (noma\'lum SFX o\'tkazib yuborildi)');
   await shot('06-claude-qollandi');
 
+  console.log('Matn');
+  await tab('text');
+  await page.waitForTimeout(800);
+  check((await page.$$eval('#txGrid .tx-card', (e) => e.length)) === 12, '12 ta 2D shablon');
+  const thumbInk = await page.$eval('#txGrid .tx-card canvas', (c) => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; });
+  check(thumbInk > 100, 'shablon kartalarida jonli namunalar chizildi');
+  await page.click('.tx-card[data-id="pop"]');
+  await page.fill('#txText', 'SALOM\nDUNYO');
+  await page.evaluate(() => { const r = window.GCText.recipe(); r.duration = 1; window.GCText.setRecipe(r); });
+  await page.waitForTimeout(400);
+  const ink = async () => page.$eval('#txPreview', (c) => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; });
+  check((await ink()) > 200, 'oldindan ko\'rish jonli chizilmoqda');
+  await shot('07-matn-2d');
+  await page.click('#txInsert');
+  await page.waitForFunction(() => /✓|XATO|topilmadi|qo'yilmadi/i.test(document.getElementById('txStatus').textContent), null, { timeout: 120000 }).catch(() => {});
+  const txSt = await page.textContent('#txStatus');
+  check(/✓/.test(txSt) && v2.items.length === 1 && Math.abs(v2.items[0].start.seconds - 8) < 1e-3 && Math.abs(v2.items[0].end.seconds - 9) < 1e-3, 'matn V2 ga 8s dan 1s (25 kadr): ' + txSt);
+  const recipeSaved = await page.evaluate(() => { const fs = require('fs'); const root = 'C:/Users/Ali/Documents/GeminiCut/Matn'; const d = fs.readdirSync(root)[0]; return JSON.parse(fs.readFileSync(root + '/' + d + '/recipe.json', 'utf8')); });
+  check(recipeSaved.template === 'pop' && recipeSaved.frames === 25 && recipeSaved.width === 1080, 'recipe.json saqlandi (keyin tahrirlash uchun)');
+  // tahrirlash: playhead matn ustida -> sozlamalar yuklanadi, almashtiriladi
+  await page.fill('#txText', 'BOSHQA');
+  await page.click('#txEdit');
+  await page.waitForTimeout(400);
+  check((await page.$eval('#txText', (e) => e.value)) === 'SALOM\nDUNYO' && /Yangilash/.test(await page.textContent('#txInsert')), 'playhead\'dagi matn tahrirga yuklandi');
+  await page.fill('#txText', 'YANGI MATN');
+  await page.click('#txInsert');
+  await page.waitForFunction(() => /✓|XATO/i.test(document.getElementById('txStatus').textContent) && /yangilandi|XATO/i.test(document.getElementById('txStatus').textContent), null, { timeout: 120000 }).catch(() => {});
+  check(v2.items.length === 1 && /yangilandi/.test(await page.textContent('#txStatus')), 'matn o\'rnida yangilandi: ' + await page.textContent('#txStatus'));
+  await page.click('#txKind [data-v="3d"]');
+  await page.waitForTimeout(1500);
+  check((await page.$$eval('#txGrid .tx-card', (e) => e.length)) === 7, '7 ta 3D Liquid shablon');
+  await page.click('.tx-card[data-id="liquid_gold"]');
+  await page.fill('#txText', 'GOLD');
+  await page.waitForTimeout(1500);
+  check((await ink()) > 200, '3D suyuq oltin oldindan ko\'rishda chizildi (WebGL)');
+  await shot('08-matn-3d');
+
+  console.log('ChatGPT');
+  await tab('chatgpt');
+  await page.waitForTimeout(400);
+  check(!(await page.isVisible('#gpColorPane')) && await page.isVisible('#gpEditPane'), 'Premiere: rang berish yashirin, montaj ko\'rinadi');
+  await page.evaluate(() => {
+    window.GCApplication.settings().openaiKey = 'sk-test';
+    window.GCAI.openai = async ({ content, schema }) => {
+      window.__gptContent = content;
+      return { summary: 'ChatGPT: sekin zoom.', motions: [{ clip: 0, property: 'scale', mode: 'relative', easing: 'ease_out', keyframes: [{ time: 0, value: 100, x: 0, y: 0 }, { time: 2, value: 112, x: 0, y: 0 }], reason: 'Zoom' }], sfx: [], cuts: [] };
+    };
+  });
+  await page.fill('#gpPrompt', 'Sekin zoom');
+  await page.click('#gpRun');
+  await page.waitForSelector('#gpPlan:not([hidden])', { timeout: 10000 }).catch(async () => { console.log('gpStatus:', await page.textContent('#gpStatus')); });
+  check((await page.evaluate(() => (window.__gptContent || []).filter((b) => b.type === 'image').length)) >= 1, 'ChatGPT\'ga kadrlar yuborildi');
+  await shot('09-chatgpt');
+  await page.click('#gpApply');
+  await page.waitForTimeout(500);
+  check(/Qo'llandi/.test(await page.textContent('#gpStatus')), 'ChatGPT rejasi qo\'llandi: ' + await page.textContent('#gpStatus'));
+
   console.log('Subtitr uslubi');
   await tab('subs');
   await page.evaluate(() => {
@@ -163,7 +223,7 @@ const SHIM = fs.readFileSync(path.join(__dirname, 'browser-shim.js'), 'utf8');
   await page.click('#btnProofread');
   await page.waitForTimeout(500);
   check(await page.$eval('#cueList .cue:nth-child(2)', (e) => e.classList.contains('fixed')), 'AI imlo tekshiruvi tuzatishni belgiladi');
-  await shot('07-subtitr-uslub');
+  await shot('10-subtitr-uslub');
 
   console.log('Bloknot');
   await tab('notes');
@@ -175,24 +235,24 @@ const SHIM = fs.readFileSync(path.join(__dirname, 'browser-shim.js'), 'utf8');
   await page.click('[data-ai="free"]');
   await page.waitForTimeout(500);
   check((await page.$eval('#noteText', (e) => e.value)).includes('[KADR 1]'), 'AI matni qo\'shildi');
-  await shot('08-bloknot');
+  await shot('11-bloknot');
 
   console.log('Video AI');
   await tab('flow');
   await page.waitForTimeout(300);
-  await shot('09-video-ai');
+  await shot('12-video-ai');
   await page.click('#flowEngine [data-v="flow"]');
   await page.waitForTimeout(200);
-  await shot('10-flow');
+  await shot('13-flow');
 
   console.log('Sozlamalar');
   await tab('settings');
-  await shot('11-sozlamalar');
+  await shot('14-sozlamalar');
 
   await page.setViewportSize({ width: 900, height: 900 });
   await tab('sounds');
   await page.waitForTimeout(500);
-  await shot('12-keng-effektlar');
+  await shot('15-keng-effektlar');
 
   console.log(errors.length ? '\nXATOLAR:\n' + errors.join('\n') : '\nHammasi muvaffaqiyatli.');
   await browser.close();

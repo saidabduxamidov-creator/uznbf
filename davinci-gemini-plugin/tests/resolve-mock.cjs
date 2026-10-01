@@ -5,6 +5,7 @@ const path = require('path');
 
 const FPS = 25, START = 90000; // 01:00:00:00 @ 25 fps
 let uid = 0;
+let currentProject = null; // RefreshLUTList chaqirilganmi
 
 class MediaPoolItem {
   constructor(file, frames) { this.file = file; this.frames = frames; this.name = path.basename(file); }
@@ -15,7 +16,10 @@ class MediaPoolItem {
 class Comp { constructor() { this.scripts = []; } async Execute(s) { this.scripts.push(s); return true; } }
 
 class TimelineItem {
-  constructor(start, end, mpi, sourceStart) { this.start = start; this.end = end; this.mpi = mpi; this.src = sourceStart || 0; this.comps = []; this.id = 'ti' + (uid++); }
+  constructor(start, end, mpi, sourceStart) {
+    this.start = start; this.end = end; this.mpi = mpi; this.src = sourceStart || 0; this.comps = []; this.id = 'ti' + (uid++);
+    this.versions = ['Version 1']; this.cur = 'Version 1'; this.luts = {}; this.cdl = null;
+  }
   async GetStart() { return this.start; }
   async GetEnd() { return this.end; }
   async GetName() { return this.mpi ? this.mpi.name : 'item'; }
@@ -26,6 +30,15 @@ class TimelineItem {
   async GetFusionCompCount() { return this.comps.length; }
   async GetFusionCompByIndex(i) { return this.comps[i - 1]; }
   async AddFusionComp() { const c = new Comp(); this.comps.push(c); return c; }
+  async GetCurrentVersion() { return { versionName: this.cur, versionType: 0 }; }
+  async AddVersion(n) { if (this.versions.includes(n)) return false; this.versions.push(n); return true; }
+  async LoadVersionByName(n) { if (!this.versions.includes(n)) return false; this.cur = n; return true; }
+  async DeleteVersionByName(n) { if (n === this.cur || !this.versions.includes(n)) return false; this.versions = this.versions.filter((v) => v !== n); delete this.luts[n]; return true; }
+  async GetNodeGraph() {
+    const it = this;
+    return { async SetLUT(i, p) { if (i !== 1 || !path.isAbsolute(p) || !fs.existsSync(p) || !currentProject || !currentProject.lutRefreshed) return false; it.luts[it.cur] = p; return true; } };
+  }
+  async SetCDL(m) { this.cdl = m; return true; }
 }
 
 class Timeline {
@@ -49,6 +62,7 @@ class Timeline {
   async GetCurrentTimecode() { return tc(this.ph); }
   async SetCurrentTimecode(s) { const [h, m, sec, f] = s.split(/[:;]/).map(Number); this.ph = ((h * 60 + m) * 60 + sec) * FPS + f; return true; }
   async GetMarkInOut() { return {}; }
+  async DeleteClips(list) { for (const t of Object.values(this.tracks)) t.forEach((tr, i) => { t[i] = tr.filter((x) => !list.includes(x)); }); return true; }
 }
 function tc(fr) { const p = (n) => String(n).padStart(2, '0'); return `${p(Math.floor(fr / (FPS * 3600)))}:${p(Math.floor(fr / (FPS * 60)) % 60)}:${p(Math.floor(fr / FPS) % 60)}:${p(fr % FPS)}`; }
 
@@ -63,13 +77,21 @@ function makeResolve() {
   const root = new Folder('Master');
   const tl = new Timeline('C9966');
   const project = { timelines: [tl], current: tl, render: [], renderSettings: null, stills: [] };
+  currentProject = project;
   let current = root;
   const mediaPool = {
     async GetRootFolder() { return root; },
     async AddSubFolder(parent, name) { const f = new Folder(name); parent.subs.push(f); return f; },
     async SetCurrentFolder(f) { current = f; return true; },
     async ImportMedia(paths) {
-      return paths.map((p) => { const m = new MediaPoolItem(p, /\.mp4$/i.test(p) ? 125 : /\.srt$/i.test(p) ? 250 : 20); current.clips.push(m); return m; });
+      return paths.map((p) => {
+        if (typeof p === 'object') { // PNG ketma-ketligi: { FilePath: ".../gc_%04d.png", StartIndex, EndIndex }
+          const first = p.FilePath.replace(/%0(\d)d/, (m, n) => String(p.StartIndex).padStart(Number(n), '0'));
+          if (!fs.existsSync(first)) return null;
+          const m = new MediaPoolItem(p.FilePath, p.EndIndex - p.StartIndex + 1); current.clips.push(m); return m;
+        }
+        const m = new MediaPoolItem(p, /\.mp4$/i.test(p) ? 125 : /\.srt$/i.test(p) ? 250 : 20); current.clips.push(m); return m;
+      }).filter(Boolean);
     },
     async CreateEmptyTimeline(name) { if (project.timelines.some((t) => t.name === name)) return null; const t = new Timeline(name); project.timelines.push(t); return t; },
     async AppendToTimeline(infos) {
@@ -108,6 +130,7 @@ function makeResolve() {
     async IsRenderingInProgress() { return false; },
     async GetRenderJobStatus() { return { JobStatus: 'Complete' }; },
     async DeleteRenderJob() { return true; },
+    async RefreshLUTList() { project.lutRefreshed = true; return true; },
     async ExportCurrentFrameAsStill(p) { project.stills.push({ path: p, frame: project.current.ph }); fs.writeFileSync(p, 'PNG'); return true; },
   };
   const resolve = {
