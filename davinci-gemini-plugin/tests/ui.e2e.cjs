@@ -181,6 +181,14 @@ const ELECTRON = `(function () {
   await page.click('#gcRevert');
   await page.waitForTimeout(500);
   check(nt.tracks.video[0].every((it) => it.cur === 'Version 1' && it.versions.length === 1), 'asl rangga qaytarildi: ' + await page.textContent('#gcStatus'));
+  await page.selectOption('#gcMethod', 'fusion');
+  await page.click('#gcApply');
+  await page.waitForFunction(() => /rang berildi|qo'llanmadi/.test(document.getElementById('gcStatus').textContent), null, { timeout: 60000 }).catch(() => {});
+  check(nt.tracks.video[0].every((it) => it.comps.some((c) => c.lut)) && /Fusion LUT/.test(await page.textContent('#gcStatus')), 'Usul: Fusion LUT - Edit sahifasida ko\'rinadi: ' + await page.textContent('#gcStatus'));
+  await page.click('#gcRevert');
+  await page.waitForTimeout(500);
+  check(nt.tracks.video[0].every((it) => it.comps.every((c) => !c.lut)), 'Fusion rangi olib tashlandi');
+  await page.selectOption('#gcMethod', 'auto');
 
   console.log('Matn');
   await tab('text');

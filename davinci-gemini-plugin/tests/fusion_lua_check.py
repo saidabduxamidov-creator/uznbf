@@ -11,7 +11,9 @@ js = r"""
 const h = require(process.argv[1]);
 const lua = h.buildMotionLua({ size: [[0, 1], [9, 1.15], [50, 1]], center: [[0, 0.5, 0.5], [50, 0.485, 0.495]], angle: [[0, 0], [10, 3]], gain: [[0, 0], [12, 1]] });
 const lua2 = h.buildMotionLua({ size: [[0, 1], [20, 1.2]] });
-console.log(JSON.stringify({ lua, lua2, reset: h.buildResetLua() }));
+const st = require('path').join(require('os').tmpdir(), 'gc_grade_status.txt');
+try { require('fs').unlinkSync(st); } catch (e) {}
+console.log(JSON.stringify({ lua, lua2, reset: h.buildResetLua(), grade: h.buildGradeLua('C:\\LUT\\GeminiCut\\GC_a.cube', st), gradeReset: h.buildGradeResetLua(), status: st }));
 """
 out = json.loads(subprocess.check_output(["node", "-e", js, os.path.join(here, "..", "host.js")]))
 
@@ -39,6 +41,7 @@ local function Tool(name, kind)
   end
   t.SetAttrs = function(self, a) if a.TOOLS_Name then tools[self.name] = nil; self.name = a.TOOLS_Name; tools[self.name] = self end end
   t.Delete = function(self) inputObj:ConnectTo(nil) tools[self.name] = nil end
+  t.GetInput = function(self, k) return rawget(self.values, k) end
   setmetatable(t, mt)
   tools[name] = t
   return t
@@ -105,6 +108,21 @@ check(g.keysOf("GCTransform", "Center") != "", "boshqa parametrlar (Center) saql
 L = run(out["lua"], out["reset"])
 g = L.globals()
 check(g.chainNames() == "MediaIn1", "reset: GeminiCut vositalari o'chirildi, MediaIn1 > MediaOut1 tiklandi (" + g.chainNames() + ")")
+
+# --- rang (Fusion FileLUT zaxirasi) ---
+L = run(out["grade"])
+g = L.globals()
+check(g.chainNames() == "MediaIn1 > GCGrade", "rang: MediaIn1 > GCGrade(FileLUT) > MediaOut1 (" + g.chainNames() + ")")
+gt = L.eval('comp:FindTool("GCGrade")')
+check(gt["kind"] == "FileLUT" and gt["values"]["LUTFile"] == "C:\\LUT\\GeminiCut\\GC_a.cube", "FileLUT vositasi, LUTFile yo'li to'g'ri: " + str(gt["values"]["LUTFile"]))
+check(os.path.exists(out["status"]) and open(out["status"]).read().endswith("GC_a.cube"), "tekshiruv fayli (io.open) yozildi")
+check(g.comp.locked == 0, "rang: Lock/Unlock muvozanatda")
+L = run(out["lua"], out["grade"], out["grade"])
+check(L.globals().chainNames() == "MediaIn1 > GCGrade > GCTransform > GCFade", "motion + rang: rang MediaIn'dan keyin, takrorlanmaydi (" + L.globals().chainNames() + ")")
+L = run(out["grade"], out["lua"])
+check(L.globals().chainNames() == "MediaIn1 > GCGrade > GCTransform > GCFade", "rang + motion: tartib to'g'ri (" + L.globals().chainNames() + ")")
+L = run(out["lua"], out["grade"], out["gradeReset"])
+check(L.globals().chainNames() == "MediaIn1 > GCTransform > GCFade", "rangni olib tashlash motion'ga tegmaydi (" + L.globals().chainNames() + ")")
 
 print("\nHammasi muvaffaqiyatli." if ok else "\nXATO bor.")
 sys.exit(0 if ok else 1)

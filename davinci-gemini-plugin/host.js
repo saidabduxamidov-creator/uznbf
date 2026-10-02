@@ -15,7 +15,7 @@
  */
 "use strict";
 
-const VERSION = "4.2.0";
+const VERSION = "4.3.0";
 const BIN = "GeminiCut";
 
 function pad(n) { return String(n).padStart(2, "0"); }
@@ -113,6 +113,50 @@ function buildResetLua() {
     "  end",
     "end",
     "if mo and mi and not mo.Input:GetConnectedOutput() then mo.Input = mi.Output end",
+    "c:Unlock()",
+  ].join("\n");
+}
+
+/*
+ * Rang (Fusion zaxira usuli): MediaIn1 dan keyin "GCGrade" (FileLUT) vositasi .cube LUT bilan.
+ * Edit sahifasida darhol ko'rinadi. statusPath - natija yoziladigan fayl (tekshirish uchun).
+ */
+function buildGradeLua(lutPath, statusPath) {
+  return [
+    "local c = comp",
+    "c:Lock()",
+    'local mi = c:FindTool("MediaIn1")',
+    'local mo = c:FindTool("MediaOut1")',
+    'if not mi or not mo then c:Unlock() error("MediaIn1/MediaOut1 topilmadi") end',
+    'local t = c:FindTool("GCGrade")',
+    "if not t then",
+    "  local outs = mi.Output:GetConnectedInputs() or {}",
+    '  t = c:AddTool("FileLUT", -32768, -32768)',
+    '  t:SetAttrs({ TOOLS_Name = "GCGrade" })',
+    "  t.Input = mi.Output",
+    "  for _, inp in pairs(outs) do inp:ConnectTo(t.Output) end",
+    "  if not mo.Input:GetConnectedOutput() then mo.Input = t.Output end",
+    "end",
+    `t.LUTFile = ${luaStr(lutPath)}`,
+    "c:Unlock()",
+    "pcall(function()",
+    `  local f = io.open(${luaStr(statusPath)}, "w")`,
+    '  if f then f:write(tostring(t:GetInput("LUTFile") or "ok")) f:close() end',
+    "end)",
+  ].join("\n");
+}
+
+/* Faqat GCGrade vositasini olib tashlaydi (motion vositalari qoladi) */
+function buildGradeResetLua() {
+  return [
+    "local c = comp",
+    "c:Lock()",
+    'local t = c:FindTool("GCGrade")',
+    "if t then",
+    "  local src = t.Input:GetConnectedOutput()",
+    "  for _, inp in pairs(t.Output:GetConnectedInputs() or {}) do inp:ConnectTo(src) end",
+    "  t:Delete()",
+    "end",
     "c:Unlock()",
   ].join("\n");
 }
@@ -274,6 +318,12 @@ function createHost(resolve, deps) {
 
   const AI_VERSION = "GeminiCut AI";
   state.origVersion = {};
+  state.fusionGraded = {};
+
+  function userLutDir() {
+    if (deps.userLutDir) return deps.userLutDir;
+    return path.join(require("os").homedir(), "Documents", "GeminiCut", "LUT");
+  }
 
   function lutDir() {
     if (deps.lutDir) return deps.lutDir;
@@ -595,14 +645,23 @@ function createHost(resolve, deps) {
       const e = await env();
       const saved = await e.tl.GetCurrentTimecode();
       const files = [];
+      let page = "", switched = false;
       try {
         for (let i = 0; i < times.length; i++) {
           await e.tl.SetCurrentTimecode(framesToTc(frameAt(e, times[i]), e.fps, e.drop));
           const f = `${base}_${i}.png`;
-          if ((await e.project.ExportCurrentFrameAsStill(f)) && fs.existsSync(f)) files.push(f);
+          let ok = (await e.project.ExportCurrentFrameAsStill(f)) && fs.existsSync(f);
+          // Ba'zi versiyalarda kadr faqat Color sahifasida eksport qilinadi
+          if (!ok && !switched && typeof resolve.OpenPage === "function") {
+            page = (await resolve.GetCurrentPage()) || "edit";
+            switched = !!(await resolve.OpenPage("color"));
+            if (switched) ok = (await e.project.ExportCurrentFrameAsStill(f)) && fs.existsSync(f);
+          }
+          if (ok) files.push(f);
         }
       } finally {
         if (saved) { try { await e.tl.SetCurrentTimecode(saved); } catch (err) { /* e'tiborsiz */ } }
+        if (switched && page && page !== "color") { try { await resolve.OpenPage(page); } catch (err) { /* e'tiborsiz */ } }
       }
       if (!files.length && times.length) throw new Error("Kadr eksport qilinmadi. Resolve'da Color yoki Edit sahifasida timeline ochiq bo'lsin.");
       return { files };
@@ -679,50 +738,106 @@ function createHost(resolve, deps) {
       const it = await findItemById(e, item.id);
       if (!it) throw new Error("Klip topilmadi (timeline o'zgargan bo'lishi mumkin).");
       const o = opts || {};
-      let versioned = false;
-      if (o.version !== false && typeof it.AddVersion === "function") {
-        const id = String(item.id);
-        await ensureOriginalVersion(it, id);
-        await it.AddVersion(AI_VERSION, 0);
-        versioned = !!(await it.LoadVersionByName(AI_VERSION, 0));
+      const method = o.method || "auto"; // auto: Color node LUT (tekshiriladi) -> Fusion LUT -> CDL
+      const id = String(item.id);
+      const steps = [];
+      const name = `GC_${safeName(item.name)}_${Date.now().toString(36)}.cube`;
+      // 1) LUT fayli: Resolve LUT papkasi (Color node uchun), bo'lmasa foydalanuvchi papkasi (Fusion uchun)
+      let file = "", inLutDir = false;
+      for (const dir of [lutDir(), userLutDir()]) {
+        try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, name), item.cube); file = path.join(dir, name); inLutDir = dir === lutDir(); break; }
+        catch (err) { steps.push("yozib bo'lmadi: " + dir); }
       }
-      // LUT faylini Resolve'ning LUT papkasiga yozamiz (o'rnatuvchi unga ruxsat beradi)
-      const dir = lutDir();
-      const file = path.join(dir, `GC_${safeName(item.name)}_${Date.now().toString(36)}.cube`);
-      let wrote = false;
-      try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, item.cube); wrote = true; } catch (err) { /* ruxsat yo'q - CDL ga o'tamiz */ }
-      let mode = "";
-      if (wrote) {
+      let mode = "", versioned = false;
+
+      // 2) Color sahifasi: alohida "GeminiCut AI" versiyasi, 1-node'ga LUT, natija tekshiriladi
+      if (method !== "fusion" && inLutDir) {
+        await ensureOriginalVersion(it, id);
+        if (o.version !== false && typeof it.AddVersion === "function") {
+          await it.AddVersion(AI_VERSION, 0);
+          versioned = !!(await it.LoadVersionByName(AI_VERSION, 0));
+        }
         try { await e.project.RefreshLUTList(); } catch (err) { /* eski versiya */ }
-        const rel = path.join(path.basename(dir), path.basename(file));
+        const rel = path.join(path.basename(lutDir()), name);
         const graph = typeof it.GetNodeGraph === "function" ? await it.GetNodeGraph() : null;
-        for (const p of [file, rel]) {
-          if (graph && typeof graph.SetLUT === "function" && (await graph.SetLUT(1, p))) { mode = "lut"; break; }
-          if (typeof it.SetLUT === "function" && (await it.SetLUT(1, p))) { mode = "lut"; break; }
+        const nodes = graph && typeof graph.GetNumNodes === "function" ? await graph.GetNumNodes() : -1;
+        if (nodes === 0) steps.push("versiyada node yo'q");
+        for (const p of nodes === 0 ? [] : [file, rel]) {
+          let ok = false;
+          if (graph && typeof graph.SetLUT === "function") ok = !!(await graph.SetLUT(1, p));
+          if (!ok && typeof it.SetLUT === "function") ok = !!(await it.SetLUT(1, p));
+          if (!ok) continue;
+          // Haqiqatan qo'yildimi? (GetLUT bor bo'lsa)
+          if (graph && typeof graph.GetLUT === "function") {
+            const got = String((await graph.GetLUT(1)) || "");
+            if (!got || path.basename(got.replace(/\\/g, "/")).toLowerCase() !== name.toLowerCase()) { steps.push("SetLUT tasdiqlanmadi"); continue; }
+          }
+          mode = "node"; break;
+        }
+        if (!mode) {
+          steps.push("Color node LUT qo'yilmadi");
+          // bo'sh AI versiyasini qoldirmaymiz
+          if (versioned) {
+            const orig = state.origVersion[id] || { versionName: "Version 1", versionType: 0 };
+            await it.LoadVersionByName(orig.versionName, orig.versionType);
+            if (typeof it.DeleteVersionByName === "function") await it.DeleteVersionByName(AI_VERSION, 0);
+            versioned = false;
+          }
         }
       }
+
+      // 3) Fusion: FileLUT vositasi - Edit sahifasida darhol ko'rinadi
+      if (!mode && method !== "node" && file) {
+        try {
+          const comp = await fusionComp(it);
+          const statusFile = path.join(userLutDir(), `status_${id.replace(/[^A-Za-z0-9_-]/g, "_")}.txt`);
+          try { fs.mkdirSync(path.dirname(statusFile), { recursive: true }); fs.rmSync(statusFile, { force: true }); } catch (err) { /* e'tiborsiz */ }
+          await comp.Execute(buildGradeLua(file, statusFile));
+          let confirmed = false;
+          for (let k = 0; k < 15 && !confirmed; k++) {
+            if (fs.existsSync(statusFile)) confirmed = true; else await sleep(100);
+          }
+          mode = "fusion";
+          if (!confirmed) steps.push("Fusion natijasi tasdiqlanmadi");
+          try { fs.rmSync(statusFile, { force: true }); } catch (err) { /* e'tiborsiz */ }
+          state.fusionGraded[id] = true;
+        } catch (err) { steps.push("Fusion: " + err.message); }
+      }
+
+      // 4) Oxirgi zaxira: CDL
       if (!mode && item.cdl && typeof it.SetCDL === "function") {
         if (await it.SetCDL(Object.assign({ NodeIndex: "1" }, item.cdl))) mode = "cdl";
       }
       if (!mode) {
-        throw new Error(wrote ? "Resolve LUT'ni qabul qilmadi. Color sahifasini bir marta ochib, qayta urinib ko'ring."
-          : "LUT papkasiga yozib bo'lmadi: " + dir + ". GeminiCut-Resolve-Setup.bat ni qayta ishga tushiring.");
+        throw new Error("Rang qo'yilmadi (" + steps.join("; ") + "). Sozlash → Usul: Fusion ni tanlab qayta urinib ko'ring.");
       }
-      return { mode, versioned, lut: wrote ? file : "" };
+      return { mode, versioned, lut: file, steps };
     },
 
-    /* GeminiCut rang versiyasini olib tashlab, klipni asl versiyasiga qaytaradi */
+    /* GeminiCut rangini olib tashlaydi: AI versiyasi o'chiriladi, Fusion GCGrade olib tashlanadi */
     async gc_revertGrade(ids) {
       const e = await env();
       let reverted = 0;
       for (const id of ids || []) {
         const it = await findItemById(e, id);
-        if (!it || typeof it.LoadVersionByName !== "function") continue;
-        const orig = state.origVersion[id] || { versionName: "Version 1", versionType: 0 };
-        if (await it.LoadVersionByName(orig.versionName, orig.versionType)) {
-          if (typeof it.DeleteVersionByName === "function") await it.DeleteVersionByName(AI_VERSION, 0);
-          reverted++;
+        if (!it) continue;
+        let done = false;
+        if (typeof it.GetCurrentVersion === "function") {
+          const cur = await it.GetCurrentVersion();
+          const orig = state.origVersion[id] || { versionName: "Version 1", versionType: 0 };
+          if (cur && cur.versionName === AI_VERSION && (await it.LoadVersionByName(orig.versionName, orig.versionType))) {
+            if (typeof it.DeleteVersionByName === "function") await it.DeleteVersionByName(AI_VERSION, 0);
+            done = true;
+          }
         }
+        if (state.fusionGraded[id] || (typeof it.GetFusionCompCount === "function" && (await it.GetFusionCompCount()) > 0)) {
+          try {
+            const comp = await it.GetFusionCompByIndex(1);
+            if (comp) { await comp.Execute(buildGradeResetLua()); if (state.fusionGraded[id]) done = true; }
+          } catch (err) { /* e'tiborsiz */ }
+          delete state.fusionGraded[id];
+        }
+        if (done) reverted++;
       }
       return { reverted };
     },
@@ -789,4 +904,4 @@ function createHost(resolve, deps) {
   return wrapped;
 }
 
-module.exports = { createHost, buildMotionLua, buildResetLua, tcToFrames, framesToTc, VERSION };
+module.exports = { createHost, buildMotionLua, buildResetLua, buildGradeLua, buildGradeResetLua, tcToFrames, framesToTc, VERSION };

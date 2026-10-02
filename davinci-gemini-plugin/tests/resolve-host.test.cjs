@@ -127,10 +127,10 @@ test('SRT, kadr eksporti va AI video importi', async () => {
   assert.strictEqual(r.ok, false);
 });
 
-test('rang: kliplar, LUT alohida versiyada, qayta qo\'llash va asl holga qaytarish', async () => {
+test('rang: Color node LUT alohida versiyada, tasdiqlanadi, qayta qo\'llash va qaytarish', async () => {
   const r = setup();
-  const lutDir = tmp();
-  const host = createHost(r.resolve, { fs, path, sleep: () => Promise.resolve(), lutDir });
+  const lutDir = tmp(), userLutDir = tmp();
+  const host = createHost(r.resolve, { fs, path, sleep: () => Promise.resolve(), lutDir, userLutDir });
   let t = await host.gc_colorTargets('playhead');
   assert.ok(t.ok, t.error);
   assert.strictEqual(t.clips.length, 1); assert.strictEqual(t.clips[0].start, 6);
@@ -142,23 +142,48 @@ test('rang: kliplar, LUT alohida versiyada, qayta qo\'llash va asl holga qaytari
   const item = r.tl.tracks.video[0][1];
   let a = await host.gc_applyGrade({ id: item.id, name: 'C9966.MP4', cube, cdl: G.toCDL({}) }, { version: true });
   assert.ok(a.ok, a.error);
-  assert.strictEqual(a.mode, 'lut'); assert.strictEqual(a.versioned, true);
+  assert.strictEqual(a.mode, 'node'); assert.strictEqual(a.versioned, true);
   assert.strictEqual(item.cur, 'GeminiCut AI');
   assert.ok(fs.existsSync(item.luts['GeminiCut AI']) && item.luts['GeminiCut AI'].startsWith(lutDir));
   assert.ok(!item.luts['Version 1'], 'asl versiyaga tegilmadi');
-  // qayta tahlil: AI versiyasidan asl versiyaga qaytib kadr olinadi, keyin qayta qo'llash
   t = await host.gc_colorTargets('playhead');
-  assert.strictEqual(item.cur, 'Version 1');
+  assert.strictEqual(item.cur, 'Version 1', 'tahlil oldidan asl versiya');
   a = await host.gc_applyGrade({ id: item.id, name: 'C9966.MP4', cube }, {});
   assert.strictEqual(item.cur, 'GeminiCut AI'); assert.strictEqual(item.versions.length, 2);
   const rv = await host.gc_revertGrade([item.id]);
   assert.strictEqual(rv.reverted, 1);
   assert.strictEqual(item.cur, 'Version 1'); assert.deepStrictEqual(item.versions, ['Version 1']);
-  // LUT papkasiga yozib bo'lmasa - CDL zaxirasi
-  const blocker = path.join(tmp(), 'fayl'); fs.writeFileSync(blocker, 'x'); // papka o'rnida fayl -> yozib bo'lmaydi
-  const host2 = createHost(r.resolve, { fs, path, sleep: () => Promise.resolve(), lutDir: path.join(blocker, 'LUT') });
-  a = await host2.gc_applyGrade({ id: item.id, name: 'x', cube, cdl: G.toCDL({ exposure: 0.5 }) }, {});
-  assert.ok(a.ok, a.error); assert.strictEqual(a.mode, 'cdl'); assert.strictEqual(item.cdl.NodeIndex, '1');
+});
+
+test('rang: SetLUT "true" qaytarsa-yu qo\'ymasa yoki versiya bo\'sh bo\'lsa - Fusion LUT (Edit sahifasida ko\'rinadi)', async () => {
+  const r = setup();
+  const lutDir = tmp(), userLutDir = tmp();
+  const host = createHost(r.resolve, { fs, path, sleep: () => Promise.resolve(), lutDir, userLutDir });
+  require('../../premiere-gemini-plugin/client/js/color.js');
+  const G = globalThis.GCColor;
+  const cube = G.buildCube(G.PRESETS.warm.look, 9, 'test');
+  const [c0, c1, c2] = r.tl.tracks.video[0];
+  r.project.silentLut = true;
+  let a = await host.gc_applyGrade({ id: c0.id, name: 'a', cube }, {});
+  assert.ok(a.ok, a.error);
+  assert.strictEqual(a.mode, 'fusion'); assert.match(a.steps.join(';'), /tasdiqlanmadi/);
+  assert.strictEqual(c0.cur, 'Version 1', 'bo\'sh AI versiyasi qoldirilmadi'); assert.deepStrictEqual(c0.versions, ['Version 1']);
+  assert.strictEqual(c0.comps.length, 1); assert.match(c0.comps[0].scripts[0], /AddTool\("FileLUT"/);
+  assert.strictEqual(c0.comps[0].lut, a.lut);
+  r.project.silentLut = false; r.project.emptyVersions = true;
+  a = await host.gc_applyGrade({ id: c1.id, name: 'b', cube }, {});
+  assert.strictEqual(a.mode, 'fusion'); assert.match(a.steps.join(';'), /node yo'q/);
+  r.project.emptyVersions = false;
+  a = await host.gc_applyGrade({ id: c2.id, name: 'c', cube }, { method: 'fusion' });
+  assert.strictEqual(a.mode, 'fusion', 'foydalanuvchi Fusion usulini tanladi'); assert.strictEqual(c2.cur, 'Version 1');
+  const rv = await host.gc_revertGrade([c0.id, c1.id, c2.id]);
+  assert.strictEqual(rv.reverted, 3);
+  assert.ok([c0, c1, c2].every((c) => c.comps[0].lut === null), 'Fusion GCGrade olib tashlandi');
+  // ikkala papkaga ham yozib bo'lmasa - CDL
+  const blocker = path.join(tmp(), 'fayl'); fs.writeFileSync(blocker, 'x');
+  const host2 = createHost(r.resolve, { fs, path, sleep: () => Promise.resolve(), lutDir: path.join(blocker, 'L'), userLutDir: path.join(blocker, 'U') });
+  a = await host2.gc_applyGrade({ id: c1.id, name: 'x', cube, cdl: G.toCDL({ exposure: 0.5 }) }, {});
+  assert.ok(a.ok, a.error); assert.strictEqual(a.mode, 'cdl'); assert.strictEqual(c1.cdl.NodeIndex, '1');
 });
 
 test('animatsion matn: PNG ketma-ketligi yuqori trekka, tahrir uchun topiladi va almashtiriladi', async () => {

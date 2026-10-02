@@ -24,7 +24,9 @@
 
   /* Windows'da bor shriftlar (yo'q bo'lsa brauzer o'xshashini oladi) */
   const FONTS = ["Arial Black", "Impact", "Segoe UI", "Segoe UI Black", "Bahnschrift", "Arial", "Montserrat", "Calibri",
-    "Trebuchet MS", "Verdana", "Georgia", "Times New Roman", "Cambria", "Franklin Gothic Medium", "Century Gothic", "Comic Sans MS", "Consolas"];
+    "Trebuchet MS", "Verdana", "Georgia", "Times New Roman", "Cambria", "Franklin Gothic Medium", "Century Gothic", "Comic Sans MS", "Consolas",
+    // to'y / nafis: Windows va Office bilan keladi
+    "Gabriola", "Segoe Script", "Monotype Corsiva", "Edwardian Script ITC", "Lucida Handwriting", "Palatino Linotype", "Book Antiqua", "Segoe UI Emoji"];
 
   const DEFAULT = {
     v: 1, template: "pop", text: "GEMINICUT\nSTUDIO", sub: "", font: "Arial Black", weight: 800, italic: false, upper: true,
@@ -32,6 +34,8 @@
     stroke: 0, shadow: 0.6, glow: 0, x: 0.5, y: 0.5, align: "center", duration: 3, speed: 1,
     // 3D
     material: "gold", depth: 0.35, bevel: 0.06, rot: 35, liquid: 0.6, flow: 1, drops: false,
+    // fonli matnlar va fonlar
+    noText: false, padX: 1, padY: 1, density: 0.5,
   };
 
   /* ============== shablonlar katalogi ============== */
@@ -47,7 +51,7 @@
     { id: "glitch", kind: "2d", name: "Glitch", desc: "RGB siljish va raqamli shovqin", set: { font: "Bahnschrift", weight: 700 } },
     { id: "shine", kind: "2d", name: "Yaltiroq gradient", desc: "Gradient va yaltirash chizig'i", set: { color: "#ffe08a", color2: "#ff7a18" } },
     { id: "split", kind: "2d", name: "Ikkiga ochilish", desc: "Markazdan yuqoriga-pastga ochiladi", set: { accent: "#ffffff" } },
-    { id: "lowerthird", kind: "2d", name: "Lower third", desc: "Ism va lavozim, rangli chiziq bilan",
+    { id: "lowerthird", kind: "2d", name: "Lower third", desc: "Ism va lavozim, rangli chiziq bilan", sub: true, oneLine: true,
       set: { text: "Dilshod Rahimov", sub: "Bosh muharrir", upper: false, font: "Segoe UI", weight: 700, size: 0.045, x: 0.08, y: 0.8, align: "left", accent: "#7b6cff" } },
     { id: "liquid_gold", kind: "3d", name: "Suyuq oltin", desc: "Erigan oltin, oqib turadigan sirt", set: { size: 0.13, material: "gold", color: "#ffc94a", color2: "#ff8a00", liquid: 0.65 } },
     { id: "liquid_chrome", kind: "3d", name: "Suyuq xrom", desc: "Simob kabi oynali metall", set: { size: 0.13, material: "chrome", color: "#dfe6f0", color2: "#8aa0ff", liquid: 0.55 } },
@@ -56,7 +60,13 @@
     { id: "drops", kind: "3d", name: "Tomchilardan yig'ilish", desc: "Suyuq tomchilar qo'shilib matnga aylanadi", set: { size: 0.13, material: "water", color: "#2f9bff", color2: "#b8f0ff", liquid: 0.7, drops: true } },
     { id: "lava", kind: "3d", name: "Lava", desc: "Qizigan, yorug'lik chiqaradigan lava", set: { size: 0.13, material: "lava", color: "#ff5a1f", color2: "#ffd36b", liquid: 0.75 } },
     { id: "candy", kind: "3d", name: "3D Candy", desc: "Yaltiroq plastik, gradient rang", set: { size: 0.13, material: "candy", color: "#7b5cff", color2: "#00d5ff", liquid: 0.2, bevel: 0.1 } },
+    { id: "neon3d", kind: "3d", name: "3D Neon", desc: "Yonib turgan neon trubka, atrofida nur", set: { size: 0.13, material: "neon", color: "#ff2bd6", color2: "#ffffff", liquid: 0.15, bevel: 0.14, depth: 0.2 } },
+    { id: "marble3d", kind: "3d", name: "Marmar", desc: "Oq marmar, oltin tomirlar", set: { size: 0.13, material: "marble", color: "#f4f1ec", color2: "#c8973a", liquid: 0.1, bevel: 0.05 } },
+    { id: "rosegold", kind: "3d", name: "Rose gold", desc: "Pushti oltin metall - to'y va bayramlar uchun", set: { size: 0.13, material: "gold", color: "#f2b8a2", color2: "#d9817a", liquid: 0.45 } },
+    { id: "ice3d", kind: "3d", name: "Muz", desc: "Sovuq muz kristali", set: { size: 0.13, material: "glass", color: "#cdeeff", color2: "#ffffff", liquid: 0.9, flow: 0.4, bevel: 0.04 } },
   ];
+  /* Qo'shimcha shablon modullari (textfx-plates.js) shu yerga qo'shadi */
+  function register(list, draws) { list.forEach((t) => TEMPLATES.push(t)); Object.assign(DRAW2D, draws || {}); }
   const byId = (id) => TEMPLATES.find((t) => t.id === id) || TEMPLATES[0];
 
   function recipeFor(id, base) {
@@ -351,7 +361,7 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, W, H);
     const Rr = Object.assign({}, R);
-    if (Rr.template === "lowerthird") Rr.text = String(R.text || "").split(/\r?\n/)[0];
+    if (byId(Rr.template).oneLine) Rr.text = String(R.text || "").split(/\r?\n/)[0];
     const L = layout(ctx, Rr, W, H);
     ctx.font = L.font;
     ctx.textBaseline = "middle";
@@ -500,7 +510,11 @@ void main(){
   }
   float pix = eps * (bestT + 0.001) / F;
   float cover = hit ? 1.0 : 1.0 - smoothstep(0.0, pix * 1.5, best);
-  if (cover <= 0.001) { gl_FragColor = vec4(0.0); return; }
+  if (cover <= 0.001) {
+    // neon: sirt atrofidagi nur (glow)
+    if (uMat == 7) { float gl = exp(-best * 14.0) * 0.85; gl_FragColor = vec4(tone(uCol * 1.6), gl * uAlpha); return; }
+    gl_FragColor = vec4(0.0); return;
+  }
   vec3 p = o + dir * bestT;
   vec3 n = normalAt(p);
   // suyuq sirt: normalni oqib turgan shovqin bilan buzish
@@ -533,13 +547,20 @@ void main(){
     float hot = smoothstep(-0.2, 0.6, noise(p * 3.0 + vec3(0.0, -uTime * uFlow * 0.8, uTime * 0.3)) + 0.25 * noise(p * 9.0 + uTime));
     vec3 crust = vec3(0.08, 0.05, 0.045) * (0.3 + dif) + env(rf) * 0.06;
     col = mix(crust, mix(uCol, uCol2, hot) * 2.2, hot);
+  } else if (uMat == 7) { // neon trubka: ichi oq-issiq, chetlari rangli
+    col = uCol * (1.6 + 1.8 * fres) + mix(uCol, uCol2, 0.7) * pow(max(dot(-wd, wn), 0.0), 3.0) * 2.2 + spec;
+  } else if (uMat == 8) { // marmar
+    float vein = abs(sin(p.x * 5.0 + p.y * 2.0 + noise(p * 2.5) * 4.0 + noise(p * 7.0) * 1.2));
+    float v = smoothstep(0.92, 1.0, vein) + 0.35 * smoothstep(0.75, 1.0, abs(sin(p.y * 9.0 + noise(p * 4.0) * 3.0)));
+    vec3 stone = mix(uCol, uCol2, clamp(v, 0.0, 1.0));
+    col = stone * (0.35 + 0.65 * wrap) + env(rf) * 0.22 * (0.3 + fres) + spec * 0.9;
   } else { // candy
     col = base * (0.3 + 0.7 * dif) + spec * 1.3 + env(rf) * 0.35 * (0.2 + fres);
   }
   gl_FragColor = vec4(tone(col), a * cover * uAlpha);
 }`;
 
-  const MATS = { gold: 0, chrome: 1, jelly: 2, glass: 3, water: 4, lava: 5, candy: 6 };
+  const MATS = { gold: 0, chrome: 1, jelly: 2, glass: 3, water: 4, lava: 5, candy: 6, neon: 7, marble: 8 };
   const hex = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(String(h || "")); const v = m ? parseInt(m[1], 16) : 0xffffff; return [(v >> 16 & 255) / 255, (v >> 8 & 255) / 255, (v & 255) / 255]; };
   const toLin = (c) => c.map((x) => Math.pow(x, 2.2));
 
@@ -677,5 +698,6 @@ void main(){
     return { first: files[0], count: n, files };
   }
 
-  root.GCTextFX = { TEMPLATES, FONTS, DEFAULT, byId, recipeFor, layout, draw2D, Renderer3D, textSdf, makeDrawer, render, is3D, phases };
+  root.GCTextFX = { TEMPLATES, FONTS, DEFAULT, byId, recipeFor, layout, draw2D, Renderer3D, textSdf, makeDrawer, render, is3D, phases, register,
+    util: { E, clamp, mix, fontCss, paint, glyph, layout } };
 })(typeof window !== "undefined" ? window : globalThis);

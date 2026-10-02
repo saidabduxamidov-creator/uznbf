@@ -36,12 +36,21 @@ o'rnatuvchi Resolve bilan keladigan `WorkflowIntegration.node` modulini ishlatad
    (asl grade'ingiz saqlanadi; Color sahifasida Versions orqali almashtirish mumkin).
    **Asl rangga qaytarish** — AI versiyasini o'chiradi.
 
-LUT fayllari: `%ProgramData%\Blackmagic Design\DaVinci Resolve\Support\LUT\GeminiCut`
-(o'rnatuvchi papkani yaratib, yozish ruxsatini beradi). LUT qabul qilinmasa — CDL bilan qo'llanadi.
+**Qo'llash usuli** (Sozlash kartasida):
+- *Avto* — Color sahifasida, klipning 1-node'iga LUT; plagin LUT haqiqatan qo'yilganini tekshiradi.
+  Qo'yilmasa avtomatik **Fusion LUT** ga o'tadi.
+- *Fusion LUT* — klipga Fusion `FileLUT` vositasi (GCGrade) qo'shiladi, **Edit sahifasida darhol ko'rinadi**.
+  Rang timeline'da ko'rinmasa shu usulni tanlang.
+- *Faqat Color sahifasi* — faqat node LUT.
+
+Natijada qaysi usul ishlatilgani yoziladi. LUT fayllari: `%ProgramData%\Blackmagic Design\DaVinci Resolve\Support\LUT\GeminiCut`
+(yozib bo'lmasa `Documents\GeminiCut\LUT`). Hech biri ishlamasa — CDL bilan qo'llanadi.
+Kadr olinmasa ham tayyor uslublar qo'llanadi (avto balanssiz).
 
 ## Matn animatsiyalari va 3D Liquid
-Premiere versiyasidagi bilan bir xil: 12 ta 2D shablon va 7 ta 3D suyuq matn (oltin, xrom, jele, shisha,
-tomchilar, lava, candy). Plagin kadrlarni shaffof PNG qilib chizadi, Media Pool → GeminiCut → Matn ga
+Premiere versiyasidagi bilan bir xil: 12 ta 2D shablon, 11 ta fonli matn (shaffof shisha, 3D chat pufagi va
+boshqalar, matnsiz rejim bilan), 11 ta 3D, 6 ta to'y/zal shabloni va 10 ta matnsiz fon (bokeh, oltin
+zarrachalar, oltin ramka, gulbarglar...). Plagin kadrlarni shaffof PNG qilib chizadi, Media Pool → GeminiCut → Matn ga
 import qiladi va videodan yuqoridagi bo'sh trekka qo'yadi. **Playhead'dagi matnni tahrirlash** →
 o'zgartiring → **Yangilash**.
 

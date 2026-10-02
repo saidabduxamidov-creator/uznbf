@@ -167,6 +167,106 @@
     return out;
   }
 
+
+  /* ----------------------- 2-to'plam uchun bloklar ----------------------- */
+
+  /* Karplus-Strong tor (arfa, gitara, pizzicato) */
+  function pluck(seed, freq, sec, decay, bright) {
+    const r = rng(seed), [L, R] = buffers(sec);
+    const n = Math.max(2, Math.round(SR / freq)), buf = new Float32Array(n);
+    for (let i = 0; i < n; i++) buf[i] = r() * 2 - 1;
+    let idx = 0, last = 0;
+    const fb = Math.pow(0.001, 1 / (decay * freq));
+    for (let i = 0; i < L.length; i++) {
+      const cur = buf[idx];
+      const nxt = (cur * (bright || 0.5) + last * (1 - (bright || 0.5)));
+      last = cur;
+      buf[idx] = nxt * fb;
+      idx = (idx + 1) % n;
+      L[i] = R[i] = cur;
+    }
+    return [L, R];
+  }
+
+  /* Bir nechta tovushni vaqt bo'yicha joylashtirish: [[buf, vaqt, gain, pan], ...] */
+  function seqMix(sec, parts) {
+    const [L, R] = buffers(sec);
+    parts.forEach(([b, at, g, pan]) => {
+      const off = Math.round(at * SR), gg = g == null ? 1 : g, p = pan == null ? 0.5 : pan;
+      const gl = Math.cos(p * Math.PI / 2) * 1.41, gr = Math.sin(p * Math.PI / 2) * 1.41;
+      for (let i = 0; i < b[0].length && off + i < L.length; i++) { L[off + i] += b[0][i] * gg * gl; R[off + i] += b[1][i] * gg * gr; }
+    });
+    return [L, R];
+  }
+
+  /* Filtrlangan shovqin: fn(t, x) -> [freq, q, amp]; type - lp/hp/bp */
+  function noise(seed, sec, type, fn, stereo) {
+    const r = rng(seed), r2 = rng(seed + 999), [L, R] = buffers(sec);
+    const fl = new Biquad(type), fr = new Biquad(type);
+    let amp = 0;
+    for (let i = 0; i < L.length; i++) {
+      const t = i / SR;
+      if (i % 16 === 0) { const [f, q, a] = fn(t, i / L.length); fl.set(f, q); fr.set(f * (stereo ? 1.03 : 1), q); amp = a; }
+      const nl = r() * 2 - 1, nr = stereo ? r2() * 2 - 1 : nl;
+      L[i] = fl.run(nl) * amp; R[i] = fr.run(nr) * amp;
+    }
+    return [L, R];
+  }
+
+  function kick(seed) {
+    return tone(0.6, (t) => Math.tanh(1.8 * Math.sin(TAU * (45 * t + 105 * (1 - Math.exp(-t / 0.035)) * 0.035)) * env(t, 0.001, 0.22)) + (t < 0.004 ? (rng(seed)() * 2 - 1) * 0.4 : 0));
+  }
+  function snare(seed, dec) {
+    const n = noise(seed, 0.5, "bp", (t) => [4200, 0.6, env(t, 0.001, dec || 0.12)]);
+    const b = tone(0.5, (t) => 0.5 * Math.sin(TAU * 185 * t) * env(t, 0.001, 0.06));
+    return mix(n, b, 1);
+  }
+  function clap(seed) {
+    const b = seqMix(0.6, [0, 0.011, 0.023, 0.036].map((at, k) => [noise(seed + k, 0.25, "bp", (t) => [1250, 1.1, env(t, 0.0005, k === 3 ? 0.09 : 0.012)]), at, 1]));
+    reverb(b[0], b[1], 0.25, 0.8);
+    return b;
+  }
+  function hat(seed, open) { return noise(seed, open ? 0.6 : 0.12, "hp", (t) => [8000, 0.7, env(t, 0.0005, open ? 0.22 : 0.03)], true); }
+  function crash(seed, sec) {
+    const n = noise(seed, sec || 3, "hp", (t) => [5200 - 1500 * Math.min(1, t), 0.5, env(t, 0.002, 0.9)], true);
+    const m = bellTone(sec || 3, [[3510, 0.08], [4730, 0.06], [6020, 0.05]], 0.8, 0);
+    return mix(n, m, 1);
+  }
+  function tom(freq) { return tone(0.6, (t) => Math.sin(TAU * (freq * t + freq * 0.6 * (1 - Math.exp(-t / 0.05)) * 0.05)) * env(t, 0.002, 0.18)); }
+
+  /* 8-bit (kvadrat to'lqin) nota ketma-ketligi: [[freq, dur], ...] */
+  function chip(notes, duty) {
+    const sec = notes.reduce((a, n) => a + n[1], 0) + 0.05;
+    let acc = 0;
+    const plan = notes.map(([f, d]) => { const s0 = acc; acc += d; return [f, s0, d]; });
+    return tone(sec, (t) => {
+      const n = plan.find(([, s0, d]) => t >= s0 && t < s0 + d);
+      if (!n || !n[0]) return 0;
+      const ph = ((t - n[1]) * n[0]) % 1;
+      return (ph < (duty || 0.5) ? 0.35 : -0.35) * Math.min(1, (n[1] + n[2] - t) / 0.01);
+    });
+  }
+
+  /* Pianino tovushi (qo'shimcha garmonikalar, bolg'acha zarbasi) */
+  function piano(freqs, sec, spread) {
+    return tone(sec, (t) => {
+      let v = 0;
+      freqs.forEach((f, k) => {
+        const tt = t - (spread || 0) * k;
+        if (tt < 0) return;
+        for (let h = 1; h <= 6; h++) v += (0.28 / h) * Math.sin(TAU * f * h * (1 + 0.0004 * h * h) * tt) * env(tt, 0.002, 1.6 / (1 + h * 0.5));
+      });
+      return v * 0.5;
+    });
+  }
+
+  /* Cherkov / to'y qo'ng'irog'i: noharmonik partiallar */
+  function churchBell(f, sec) {
+    return bellTone(sec, [[f * 0.5, 0.35], [f, 0.4], [f * 1.19, 0.25], [f * 1.5, 0.2], [f * 2.0, 0.18], [f * 2.52, 0.12], [f * 3.0, 0.08]], 2.4, 0);
+  }
+
+  function saw(ph) { return (ph % 1) * 2 - 1; }
+
   /* ----------------------------- to'plam ----------------------------- */
 
   const PACK = [
@@ -230,6 +330,65 @@
     // Magic
     ["Magic", "Sparkle", () => { const r = rng(91); const notes = Array.from({ length: 12 }, (_, k) => [1500 + r() * 3500, 0.12, k * 0.07]); return bellTone(2.2, notes, 0.25, 0.45); }],
     ["Magic", "Shimmer", () => { const b = whoosh(92, 2, 3000, 9000, 6000, 3, 0.5, true); const s = bellTone(2, [[2093, 0.15, 0.2], [2637, 0.15, 0.45], [3136, 0.15, 0.7]], 0.5, 0.5); return mix(b, s, 1); }],
+
+    // ======================= 2-to'plam =======================
+    ["Cinematic", "Braam", () => { const ph = [0, 0, 0, 0]; const lp = new Biquad("lp"), lp2 = new Biquad("lp"); const b = tone(4, (t, i) => { if (i % 16 === 0) { const f = 250 + 2600 * Math.sin(Math.PI * Math.min(1, t / 3.6)) ** 2; lp.set(f, 1.4); lp2.set(f, 1.4); } let v = 0; [55, 55.4, 54.6, 110.3].forEach((f, k) => { ph[k] += f / SR; v += saw(ph[k]) * (k === 3 ? 0.4 : 1); }); return Math.tanh(lp2.run(lp.run(v)) * 1.6) * env(t, 0.05, 1.6); }); reverb(b[0], b[1], 0.45, 1.6); return b; }],
+    ["Cinematic", "Trailer Hit", () => { const b = mix(mix(impact(201, 3.5, 160, 38, 1.1, 1.2, 2.6, 0), crash(202, 3.5), 0.45), tone(3.5, (t) => 0.8 * Math.sin(TAU * (38 * t)) * env(t, 0.005, 0.9)), 0.8); reverb(b[0], b[1], 0.4, 1.6); return b; }],
+    ["Cinematic", "Whoosh Boom", () => mix(whoosh(203, 1.2, 200, 2600, 300, 1.2, 0.92, true), delayed(impact(204, 2.6, 130, 35, 0.9, 1, 2.4, 0.4), 1.08), 1)],
+    ["Cinematic", "Reverse Cymbal", () => { const b = reverseBuf(crash(205, 2.2)); return b; }],
+    ["Cinematic", "Riser + Hit", () => mix(riser(206, 2.5), delayed(impact(207, 2.5, 150, 40, 0.8, 1.2, 2.4, 0.4), 2.48), 1)],
+    ["Cinematic", "Deep Drone", () => { const ph = [0, 0, 0]; const b = tone(6, (t) => { let v = 0; [41.2, 61.7, 82.4].forEach((f, k) => { ph[k] += f * (1 + 0.003 * Math.sin(TAU * 0.2 * t + k)) / SR; v += Math.sin(TAU * ph[k]) * (0.5 / (k + 1)); }); return v * bell(t / 6) * 1.2; }); reverb(b[0], b[1], 0.35, 1.6); return b; }],
+    ["Cinematic", "Sub Boom Uzun", () => tone(3.5, (t) => Math.sin(TAU * (32 * t + 50 * (1 - Math.exp(-t / 0.2)) * 0.2)) * env(t, 0.004, 1.2))],
+
+    ["Transition", "Spin Whoosh", () => { const b = whoosh(211, 1.1, 300, 4000, 800, 1.3, 0.55, false); for (let i = 0; i < b[0].length; i++) { const p = 0.5 + 0.5 * Math.sin(TAU * 5 * i / SR); b[0][i] *= 1.4 * Math.cos(p * Math.PI / 2); b[1][i] *= 1.4 * Math.sin(p * Math.PI / 2); } return b; }],
+    ["Transition", "Fast Swipe", () => whoosh(212, 0.22, 2000, 10000, 6000, 0.9, 0.6, true)],
+    ["Transition", "Flash Whoosh", () => mix(whoosh(213, 0.7, 600, 8000, 3000, 1, 0.55, true), delayed(bellTone(1.2, [[2637, 0.12], [3951, 0.1, 0.02]], 0.4, 0.4), 0.38), 1)],
+    ["Transition", "Glitch Transition", () => mix(glitch(214, 0.7), whoosh(215, 0.7, 300, 5000, 1000, 1.2, 0.5, true), 0.8)],
+
+    ["Ijtimoiy tarmoq", "Like Pop", () => seqMix(0.4, [[tone(0.2, (t) => Math.sin(TAU * (700 * t + 1500 * t * t)) * env(t, 0.001, 0.04)), 0], [tone(0.2, (t) => Math.sin(TAU * (1050 * t + 1800 * t * t)) * env(t, 0.001, 0.05)), 0.07]])],
+    ["Ijtimoiy tarmoq", "Xabar Yuborildi", () => mix(whoosh(221, 0.35, 900, 5000, 5000, 1.1, 0.8, false), delayed(tone(0.2, (t) => Math.sin(TAU * 1568 * t) * env(t, 0.001, 0.05)), 0.28), 0.8)],
+    ["Ijtimoiy tarmoq", "Bildirishnoma 2", () => { const b = seqMix(0.8, [[bellTone(0.6, [[1046.5, 0.5]], 0.25, 0), 0], [bellTone(0.6, [[1568, 0.5]], 0.3, 0), 0.11]]); reverb(b[0], b[1], 0.2, 0.8); return b; }],
+    ["Ijtimoiy tarmoq", "Obuna Ding", () => mix(bellTone(1.8, [[1318.5, 0.5], [1975.5, 0.35, 0.08]], 0.7, 0.3), delayed(bellTone(1.5, [[3136, 0.12, 0.05], [3951, 0.1, 0.12], [4699, 0.08, 0.2]], 0.3, 0.4), 0.12), 1)],
+    ["Ijtimoiy tarmoq", "Kamera Flash", () => mix(clicks(222, 0.4, [0.005], 2400, 0.015, 1), delayed(noise(223, 0.6, "hp", (t) => [3000 + 6000 * t, 0.7, env(t, 0.002, 0.15) * 0.6]), 0.03), 1)],
+
+    ["O'yin (8-bit)", "Tanga", () => chip([[988, 0.08], [1319, 0.3]], 0.5)],
+    ["O'yin (8-bit)", "Level Up", () => chip([[523, 0.07], [659, 0.07], [784, 0.07], [1047, 0.07], [784, 0.07], [1047, 0.25]], 0.25)],
+    ["O'yin (8-bit)", "Sakrash", () => tone(0.3, (t) => ((t * (300 + 1400 * t)) % 1 < 0.5 ? 0.35 : -0.35) * env(t, 0.002, 0.12))],
+    ["O'yin (8-bit)", "Game Over", () => chip([[784, 0.15], [740, 0.15], [698, 0.15], [659, 0.5]], 0.5)],
+    ["O'yin (8-bit)", "Power Up 8-bit", () => tone(0.7, (t) => { const f = 200 * Math.pow(2, Math.floor(t * 24) / 6); return ((t * f) % 1 < 0.5 ? 0.3 : -0.3) * Math.min(1, (0.7 - t) / 0.05); })],
+
+    ["Kulgili", "Ba-dum-tss", () => seqMix(1.8, [[tom(220), 0, 0.8], [tom(160), 0.17, 0.8], [kick(231), 0.17, 0.7], [crash(232, 1.6), 0.36, 0.5]])],
+    ["Kulgili", "Muvaffaqiyatsiz (Trombon)", () => { let ph = 0; const lp = new Biquad("lp"); const notes = [[311, 0, 0.45], [293.7, 0.5, 0.45], [277.2, 1.0, 0.45], [261.6, 1.5, 1.2]]; return tone(2.8, (t, i) => { const n = notes.filter(([, s0]) => t >= s0).pop(); const tt = t - n[1]; const vib = tt > 0.3 && n[1] >= 1.5 ? 1 + 0.02 * Math.sin(TAU * 6 * tt) : 1; ph += n[0] * vib / SR; if (i % 16 === 0) lp.set(400 + 2200 * Math.min(1, tt / 0.12) * Math.exp(-tt / 0.5), 2); return Math.tanh(lp.run(saw(ph)) * 1.5) * (tt < n[2] ? Math.min(1, tt / 0.03) : 0) * 0.6; }); }],
+    ["Kulgili", "Plastinka Tirnalishi", () => { const r = rng(233); const lp = new Biquad("bp"); return tone(0.7, (t, i) => { const m = Math.sin(TAU * 3.2 * t); if (i % 16 === 0) lp.set(800 + 2400 * Math.abs(m), 2.5); return lp.run(r() * 2 - 1) * Math.abs(m) * 1.6 * env(t, 0.005, 0.4); }); }],
+    ["Kulgili", "Hushtak Yuqoriga", () => tone(1.0, (t) => 0.5 * Math.sin(TAU * (600 * t + 900 * t * t)) * (1 + 0.02 * Math.sin(TAU * 7 * t)) * bell(t))],
+    ["Kulgili", "Hushtak Pastga", () => tone(1.0, (t) => 0.5 * Math.sin(TAU * (1500 * t - 800 * t * t)) * (1 + 0.02 * Math.sin(TAU * 7 * t)) * bell(t))],
+    ["Kulgili", "Bonk", () => mix(impact(234, 0.4, 900, 450, 0.05, 1, 2, 0), delayed(tone(0.7, (t) => Math.sin(TAU * (260 * t + 30 * Math.sin(TAU * 10 * t) / (TAU * 10))) * env(t, 0.004, 0.25) * 0.6), 0.04), 1)],
+    ["Kulgili", "Chigirtkalar (jimlik)", () => { const r = rng(235); const starts = []; let t = 0.1; while (t < 3.6) { starts.push(t); t += 0.55 + r() * 0.3; } return tone(4, (tt) => { let v = 0; starts.forEach((s0) => { const d = tt - s0; if (d >= 0 && d < 0.18) v += Math.sin(TAU * 4400 * d) * (Math.sin(TAU * 32 * d) > 0 ? 1 : 0) * Math.sin(Math.PI * d / 0.18); }); return v * 0.25; }); }],
+
+    ["Baraban", "Kick", () => kick(241)],
+    ["Baraban", "Snare", () => { const b = snare(242); reverb(b[0], b[1], 0.15, 0.8); return b; }],
+    ["Baraban", "Clap", () => clap(243)],
+    ["Baraban", "Hi-Hat", () => hat(244, false)],
+    ["Baraban", "Crash", () => crash(245, 3)],
+    ["Baraban", "Baraban Drobi", () => { const parts = []; let t = 0; let k = 0; while (t < 1.9) { parts.push([snare(250 + k, 0.05), t, 0.25 + 0.75 * (t / 1.9)]); t += 0.055 - 0.02 * (t / 1.9); k++; } parts.push([crash(299, 2), 1.95, 0.8]); return seqMix(4, parts); }],
+
+    ["To'y", "To'y Qo'ng'iroqlari", () => { const b = seqMix(6, [[churchBell(523, 3.5), 0, 0.8], [churchBell(659, 3.5), 0.5, 0.7], [churchBell(784, 3.5), 1.0, 0.7], [churchBell(1047, 3.5), 1.5, 0.6], [churchBell(784, 3.5), 2.0, 0.6], [churchBell(523, 3.5), 2.5, 0.7]]); reverb(b[0], b[1], 0.45, 1.6); return b; }],
+    ["To'y", "Arfa Glissando", () => { const f = [262, 294, 330, 392, 440, 523, 587, 659, 784, 880, 1047, 1175, 1319, 1568]; const b = seqMix(3.2, f.map((x, k) => [pluck(260 + k, x, 2, 1.6, 0.55), k * 0.075, 0.35, 0.2 + 0.6 * k / f.length])); reverb(b[0], b[1], 0.4, 1.4); return b; }],
+    ["To'y", "Qarsaklar", () => { const r = rng(270); const parts = []; for (let k = 0; k < 260; k++) { const t = r() * 3.6; parts.push([noise(271 + k, 0.08, "bp", (tt) => [900 + r() * 1600, 1.4, env(tt, 0.0005, 0.012)]), t, 0.25 + r() * 0.3, r()]); } const b = seqMix(4.2, parts); const bed = noise(272, 4.2, "bp", (t) => [1500, 0.5, 0.12 * bell(t / 4.2)], true); return mix(b, bed, 1); }],
+    ["To'y", "Sehrli Chime", () => { const r = rng(273); const notes = [1568, 1760, 2093, 2349, 2637, 3136, 3520]; return bellTone(3, notes.map((f, k) => [f, 0.2, k * 0.09 + r() * 0.02]), 0.9, 0.55); }],
+    ["To'y", "Romantik Piano", () => { const b = mix(piano([261.6, 329.6, 392, 523.3], 4, 0.06), delayed(piano([349.2, 440, 523.3, 698.5], 3.5, 0.06), 1.6), 0.9); reverb(b[0], b[1], 0.4, 1.4); return b; }],
+    ["To'y", "Musiqa Qutisi", () => { const mel = [1047, 1319, 1568, 1319, 1175, 1397, 1760, 1568, 1319, 1047]; const b = seqMix(4.2, mel.map((f, k) => [bellTone(1.5, [[f, 0.4], [f * 2, 0.12]], 0.45, 0), k * 0.32, 0.6, 0.35 + 0.3 * (k % 2)])); reverb(b[0], b[1], 0.3, 1.2); return b; }],
+
+    ["Tabiat", "Shamol", () => noise(280, 5, "bp", (t) => [500 + 450 * Math.sin(TAU * 0.23 * t) + 200 * Math.sin(TAU * 0.71 * t), 0.8, (0.6 + 0.4 * Math.sin(TAU * 0.17 * t + 1)) * bell(t / 5) * 1.2], true)],
+    ["Tabiat", "Yomg'ir", () => { const r = rng(281); const bed = noise(282, 5, "hp", (t) => [2500, 0.5, 0.25 * Math.min(1, t * 2) * Math.min(1, (5 - t) * 2)], true); const parts = []; for (let k = 0; k < 400; k++) parts.push([tone(0.03, (t) => Math.sin(TAU * (2500 + 3000 * r()) * t) * env(t, 0.0005, 0.006)), r() * 4.9, 0.15 + r() * 0.2, r()]); return mix(bed, seqMix(5, parts), 1); }],
+    ["Tabiat", "Momaqaldiroq", () => { const rum = noise(283, 6, "lp", (t) => [120 + 300 * Math.exp(-t / 0.4), 0.7, env(t, 0.02, 1.6) * (1 + 0.5 * Math.sin(TAU * 1.3 * t))], true); const crack = noise(284, 1, "hp", (t) => [1500, 0.6, env(t, 0.001, 0.15)], true); const b = mix(rum, crack, 0.7); reverb(b[0], b[1], 0.35, 1.6); return b; }],
+    ["Tabiat", "Olov", () => { const r = rng(285); const bed = noise(286, 5, "lp", (t) => [700, 0.6, 0.35 * bell(t / 5) ** 0.3], true); const times = []; for (let k = 0; k < 140; k++) times.push(r() * 4.9); times.sort((a, b) => a - b); return mix(bed, clicks(287, 5, times, 3000, 0.004, 1.2), 1); }],
+    ["Tabiat", "Suv Tomchisi", () => { const b = tone(0.5, (t) => Math.sin(TAU * (600 * t + 2200 * t * t)) * env(t, 0.001, 0.06)); reverb(b[0], b[1], 0.35, 0.9); return b; }],
+
+    ["Foley", "Eshik Taqillatish", () => { const knock = mix(impact(290, 0.25, 220, 120, 0.04, 0.6, 1.5, 0), noise(291, 0.2, "lp", (t) => [900, 0.7, env(t, 0.001, 0.02)]), 0.8); return seqMix(1.2, [[knock, 0], [knock, 0.22], [knock, 0.44]]); }],
+    ["Foley", "Qadam Tovushlari", () => { const step = (k) => mix(noise(292 + k, 0.25, "lp", (t) => [600, 0.8, env(t, 0.002, 0.04)]), delayed(noise(300 + k, 0.2, "bp", (t) => [2200, 1, env(t, 0.001, 0.02) * 0.5]), 0.05), 1); const parts = []; for (let k = 0; k < 6; k++) parts.push([step(k), k * 0.48, 0.8, k % 2 ? 0.6 : 0.4]); return seqMix(3.2, parts); }],
+    ["Foley", "Qog'oz Shitirlashi", () => { const r = rng(310); let a = 0; return noise(311, 1.4, "bp", (t, x) => { if (r() < 0.08) a = r(); return [3000 + 2500 * r(), 0.8, a * bell(x)]; }, true); }],
+    ["Foley", "Shisha Jiringlashi", () => bellTone(1.8, [[2794, 0.4], [4190, 0.3], [5587, 0.2, 0.01], [3520, 0.2, 0.012]], 0.6, 0.25)],
   ];
 
   function riser(seed, sec) {
@@ -291,7 +450,7 @@
     return buf;
   }
 
-  const api = { PACK_VERSION: 1, SR, list: () => PACK.map(([folder, name]) => ({ folder, name })), render: (index) => toWav(PACK[index][2]()) };
+  const api = { PACK_VERSION: 2, SR, list: () => PACK.map(([folder, name]) => ({ folder, name })), render: (index) => toWav(PACK[index][2]()) };
   root.GCSfxGen = api;
   if (typeof module === "object" && module && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

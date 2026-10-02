@@ -39,7 +39,7 @@
         <div class="logo"><svg><use href="#i-spark"/></svg></div>
         <div>
           <div class="brand-name">GeminiCut</div>
-          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.2</span></div>
+          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.3</span></div>
         </div>
       </div>
       <div class="status">
@@ -273,8 +273,8 @@
 
       <!-- ============ MATN (2D shablonlar va 3D Liquid) ============ -->
       <section class="view" id="view-text">
-        <div class="section-heading"><div><div class="eyebrow">ANIMATSION MATN</div><h1>Matn animatsiyalari</h1><p>Shablonni tanlang, matnni yozing, sozlang - bir bosishda timeline'ga.</p></div><span class="version-chip">2D · 3D Liquid</span></div>
-        <div class="segmented tx-kind" id="txKind"><button data-v="2d" class="on">2D shablonlar</button><button data-v="3d">3D Liquid</button></div>
+        <div class="section-heading"><div><div class="eyebrow">ANIMATSION MATN</div><h1>Matn animatsiyalari</h1><p>Shablonni tanlang, matnni yozing, sozlang - bir bosishda timeline'ga.</p></div><span class="version-chip">2D · 3D · To'y</span></div>
+        <div class="segmented tx-kind" id="txKind"><button data-v="2d" class="on">Matn</button><button data-v="plate">Fonli</button><button data-v="3d">3D</button><button data-v="wedding">To'y / Zal</button><button data-v="bg">Fonlar</button></div>
         <div class="tx-grid" id="txGrid"></div>
         <div class="card tx-preview-card">
           <div class="tx-stage"><canvas id="txPreview" width="320" height="180"></canvas></div>
@@ -285,7 +285,7 @@
             <button class="link-btn" id="txBg" title="Fon sifatida playhead'dagi kadrni ko'rsatish">Kadr foni</button>
           </div>
         </div>
-        <div class="card">
+        <div class="card" data-kind="2d plate 3d wedding">
           <div class="card-heading"><span class="step-number">01</span><h2>Matn</h2></div>
           <textarea id="txText" rows="2" spellcheck="false" placeholder="Matnni yozing (Enter - yangi qator)"></textarea>
           <label class="field top-gap" id="txSubWrap"><span>Ikkinchi qator (lavozim)</span><input id="txSub" spellcheck="false" /></label>
@@ -294,17 +294,25 @@
             <div class="field"><span>Qalinlik</span><div class="segmented" id="txWeight"><button data-v="400">Oddiy</button><button data-v="700">Qalin</button><button data-v="900">Juda</button></div></div>
           </div>
           <label class="switch-row"><input type="checkbox" id="txUpper" /><i class="switch"></i><em>KATTA HARFLAR</em></label>
+          <label class="switch-row" data-kind="plate wedding"><input type="checkbox" id="txNoText" /><i class="switch"></i><em>Matnsiz - faqat fon <small>shaffof fon PNG, matnni o'zingiz qo'yasiz</small></em></label>
         </div>
         <div class="card">
           <div class="card-heading"><span class="step-number">02</span><h2>Ko'rinish</h2><span class="hint-inline">o'zgarish darhol ko'rinadi</span></div>
           <div class="tx-colors">
             <label><input type="color" id="txColor" /><span>Asosiy</span></label>
             <label><input type="color" id="txColor2" /><span>Ikkinchi</span></label>
-            <label data-kind="2d"><input type="color" id="txAccent" /><span>Urg'u / fon</span></label>
+            <label data-kind="2d plate wedding bg"><input type="color" id="txAccent" /><span>Urg'u / fon</span></label>
           </div>
-          <div class="field"><span>O'lcham <b id="txSizeVal"></b></span><input type="range" id="txSize" min="0.02" max="0.25" step="0.005" /></div>
-          <div class="field"><span>Harflar oralig'i</span><input type="range" id="txSpacing" min="-0.05" max="0.4" step="0.01" /></div>
-          <div data-kind="2d">
+          <div data-kind="2d plate 3d wedding">
+            <div class="field"><span>O'lcham <b id="txSizeVal"></b></span><input type="range" id="txSize" min="0.02" max="0.25" step="0.005" /></div>
+            <div class="field"><span>Harflar oralig'i</span><input type="range" id="txSpacing" min="-0.05" max="0.4" step="0.01" /></div>
+          </div>
+          <div class="grid2" data-kind="plate">
+            <div class="field"><span>Fon kengligi</span><input type="range" id="txPadX" min="0.3" max="3" step="0.05" /></div>
+            <div class="field"><span>Fon balandligi</span><input type="range" id="txPadY" min="0.3" max="3" step="0.05" /></div>
+          </div>
+          <div class="field" data-kind="wedding bg"><span>Zichlik (zarrachalar soni)</span><input type="range" id="txDensity" min="0" max="1" step="0.05" /></div>
+          <div data-kind="2d plate wedding">
             <div class="grid2">
               <div class="field"><span>Soya</span><input type="range" id="txShadow" min="0" max="1" step="0.05" /></div>
               <div class="field"><span>Kontur</span><input type="range" id="txStroke" min="0" max="1" step="0.05" /></div>
@@ -340,7 +348,7 @@
             </div>
           </div>
           <div class="grid2">
-            <div class="field"><span>Davomiylik <b id="txDurVal"></b></span><input type="range" id="txDur" min="1" max="10" step="0.5" /></div>
+            <div class="field"><span>Davomiylik <b id="txDurVal"></b></span><input type="range" id="txDur" min="1" max="20" step="0.5" /></div>
             <div class="field"><span>Animatsiya tezligi</span><input type="range" id="txSpeed" min="0.4" max="2.5" step="0.1" /></div>
           </div>
         </div>
@@ -365,6 +373,7 @@
         <div class="section-heading"><div><div class="eyebrow">CHATGPT · OPENAI</div><h1>ChatGPT studiya</h1><p>Professional rang berish, montaj va motion - so'z bilan.</p></div><span class="version-chip" id="gpModelChip">GPT</span></div>
         <div class="segmented gp-mode" id="gpMode" data-host="resolve"><button data-v="color" class="on">Rang berish</button><button data-v="edit">Montaj · motion · SFX</button></div>
 
+        <p class="note" data-host="ppro">Rang berish (color grading) DaVinci Resolve versiyasida ishlaydi: GeminiCut-Resolve-Setup.bat. Bu yerda - ChatGPT bilan montaj, motion va SFX.</p>
         <div id="gpColorPane" data-host="resolve">
           <div class="card">
             <div class="card-heading"><span class="step-number">01</span><h2>Qaysi kliplar</h2></div>
@@ -403,6 +412,13 @@
           <div class="card gc-actions">
             <button class="btn primary big" id="gcApply"><svg><use href="#i-check"/></svg>Rangni qo'llash</button>
             <button class="btn ghost" id="gcRevert">Asl rangga qaytarish</button>
+            <label class="field top-gap"><span>Qo'llash usuli</span>
+              <select id="gcMethod">
+                <option value="auto">Avto: Color sahifasi (tekshiriladi), bo'lmasa Fusion</option>
+                <option value="fusion">Fusion LUT - Edit sahifasida darhol ko'rinadi</option>
+                <option value="node">Faqat Color sahifasi (node LUT)</option>
+              </select>
+            </label>
             <div class="cl-progress"><span class="spinner" id="gcSpinner" hidden></span><p id="gcStatus" role="status"></p><button class="link-btn danger" id="gcCancel" hidden>Bekor qilish</button></div>
             <p class="hint">Rang alohida "GeminiCut AI" versiyasida qo'yiladi - sizning asl grade'ingiz saqlanadi.</p>
           </div>
@@ -621,7 +637,7 @@
           <details class="log-box"><summary>Jurnal (diagnostika)</summary><pre id="log"></pre></details>
           <button class="btn ghost" id="btnClearCache">Tahlil keshini tozalash</button>
         </div>
-        <p class="about">GeminiCut <span id="ver">4.2.0</span> &middot; Premiere Pro 2022-2026</p>
+        <p class="about">GeminiCut <span id="ver">4.3.0</span> &middot; Premiere Pro 2022-2026</p>
       </section>
     </main>
 
@@ -642,6 +658,7 @@
   <script src="js/color.js"></script>
   <script src="js/chatgpt.js"></script>
   <script src="js/textfx.js"></script>
+  <script src="js/textfx-plates.js"></script>
   <script src="js/text.js"></script>
   <script src="js/flow.js"></script>
   <script src="js/main.js"></script>

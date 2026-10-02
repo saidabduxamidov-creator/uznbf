@@ -1042,6 +1042,8 @@ ${lines}`;
     sequence: () => state.seq,
     speechTracks: () => state.tracks.slice(),
     transcript: () => (state.cache && state.cache.transcript) || null,
+    saveSettings,
+    log,
     openSettings: (field) => { switchTab("settings"); if (field && $(field)) $(field).focus(); },
     timelineChanged: () => { state.cache = null; state.plan = null; refreshSeq(true); },
     toast,

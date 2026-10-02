@@ -66,19 +66,26 @@
       status(`${S.targets.length} ta klip. Kadrlar olinmoqda…`);
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gc-color-"));
       S.shots = [];
+      let frameErr = "";
       try {
         const ex = await window.GCHost.call("gc_exportFrames", [path.join(dir, "c"), times], 180000);
         for (let i = 0; i < ex.files.length; i++) {
-          const img = await loadImage(ex.files[i]);
-          const small = toCanvas(img, 320);
-          const stats = C().analyze(small.getContext("2d").getImageData(0, 0, small.width, small.height).data);
-          S.shots.push({ i, stats, view: toCanvas(img, 640), jpeg: toCanvas(img, 512).toDataURL("image/jpeg", 0.8).split(",")[1] });
+          try {
+            const img = await loadImage(ex.files[i]);
+            const small = toCanvas(img, 320);
+            const stats = C().analyze(small.getContext("2d").getImageData(0, 0, small.width, small.height).data);
+            S.shots.push({ i, stats, view: toCanvas(img, 640), jpeg: toCanvas(img, 512).toDataURL("image/jpeg", 0.8).split(",")[1] });
+          } catch (e) { frameErr = e.message; }
         }
+      } catch (e) {
+        frameErr = e.message; // kadrsiz ham rang berish mumkin (avto balanssiz)
       } finally { fs.rm(dir, { recursive: true, force: true }, () => {}); }
       S.preview = 0;
       renderClips();
       updatePreview();
-      status(`${S.targets.length} ta klip tayyor. Uslub tanlang yoki ChatGPT'ga yozing.`);
+      status(S.shots.length
+        ? `${S.targets.length} ta klip tayyor. Uslub tanlang yoki ChatGPT'ga yozing.`
+        : `${S.targets.length} ta klip tanlandi, lekin kadr olinmadi (${frameErr}). Uslubni baribir qo'llash mumkin - avto balanssiz.`, !S.shots.length);
     } catch (e) {
       status(e.message, true);
     } finally { setBusy(false); }
@@ -86,7 +93,7 @@
 
   /* Klip uchun yakuniy parametrlar (tahlil bo'lmagan klip - eng yaqin kadr statistikasi) */
   function paramsFor(i) {
-    const shot = S.shots[i] || S.shots[Math.min(i, S.shots.length - 1)];
+    const shot = S.shots.length ? S.shots[i] || S.shots[Math.min(i, S.shots.length - 1)] : null;
     const auto = S.auto && shot ? C().autoBalance(shot.stats, S.autoStrength) : null;
     return C().combine(auto, S.look || C().PRESETS[S.lookKey].look, S.aiClips[i], S.adj);
   }
@@ -195,8 +202,8 @@
     const settings = window.GCApplication.settings();
     if (!settings.openaiKey) { window.GCApplication.openSettings("openaiKey"); return status("Sozlamalarda ChatGPT (OpenAI) API kalitini kiriting.", true); }
     const prompt = $("gcPrompt").value.trim() || "Professional, cinematic, natural skin tones. Make all shots match.";
-    if (!S.shots.length) await capture();
-    if (!S.shots.length) return;
+    if (!S.targets.length) await capture();
+    if (!S.shots.length) return status("ChatGPT kadrlarni ko'rishi kerak, lekin kadr olinmadi. Tayyor uslublardan foydalaning yoki Color sahifasini ochib qayta urinib ko'ring.", true);
     setBusy(true, true);
     try {
       const content = [];
@@ -232,8 +239,8 @@
     if (S.busy) return;
     if (!S.targets.length) { await capture(); if (!S.targets.length) return; }
     setBusy(true);
-    const done = [], errors = [];
-    let lut = 0, cdl = 0;
+    const done = [], errors = [], modes = { node: 0, fusion: 0, cdl: 0 }, notes = new Set();
+    const method = $("gcMethod").value;
     try {
       for (let i = 0; i < S.targets.length; i++) {
         const t = S.targets[i];
@@ -241,15 +248,17 @@
         const p = paramsFor(i);
         const item = { id: t.id, name: t.name, cube: C().buildCube(p, 33, "GeminiCut " + t.name), cdl: C().toCDL(p) };
         try {
-          const r = await window.GCHost.call("gc_applyGrade", [item, { version: true }], 60000);
+          const r = await window.GCHost.call("gc_applyGrade", [item, { version: true, method }], 60000);
           done.push(t.id);
-          if (r.mode === "lut") lut++; else cdl++;
+          modes[r.mode] = (modes[r.mode] || 0) + 1;
+          (r.steps || []).forEach((x) => notes.add(x));
         } catch (e) { errors.push(`${t.name}: ${e.message}`); }
       }
       S.applied = done;
-      const how = lut && !cdl ? "LUT" : cdl && !lut ? "CDL" : "LUT/CDL";
+      const how = [modes.node && `${modes.node} ta Color sahifasida ("GeminiCut AI" versiyasi)`, modes.fusion && `${modes.fusion} ta Fusion LUT orqali (Edit sahifasida ko'rinadi)`, modes.cdl && `${modes.cdl} ta CDL`].filter(Boolean).join(", ");
+      window.GCApplication.log && window.GCApplication.log("Rang: " + how + (notes.size ? " | " + Array.from(notes).join("; ") : ""));
       status(done.length
-        ? `✓ ${done.length} ta klipga rang berildi (${how}, "GeminiCut AI" versiyasi). Color sahifasida Versions orqali solishtirish mumkin.` + (errors.length ? " Xatolar: " + errors.join("; ") : "")
+        ? `✓ ${done.length} ta klipga rang berildi: ${how}.` + (errors.length ? " Xatolar: " + errors.join("; ") : "") + (modes.node ? " Timeline'da ko'rinmasa: Usul → Fusion." : "")
         : "Rang qo'llanmadi: " + errors.join("; "), !done.length);
     } finally { setBusy(false); }
   }
@@ -302,6 +311,9 @@
     $("gcCompare").addEventListener("input", (e) => { S.compare = Number(e.target.value); updatePreview(); });
     $("gcAuto").addEventListener("change", (e) => { S.auto = e.target.checked; updatePreview(); });
     $("gcAutoStrength").addEventListener("input", (e) => { S.autoStrength = Number(e.target.value); updatePreview(); });
+    const settings = window.GCApplication.settings();
+    $("gcMethod").value = settings.colorMethod || "auto";
+    $("gcMethod").addEventListener("change", () => { settings.colorMethod = $("gcMethod").value; window.GCApplication.saveSettings && window.GCApplication.saveSettings(); });
     $("gcResetAdj").addEventListener("click", () => {
       S.adj = { intensity: 1, exposure: 0, contrast: 0, saturation: 1, temperature: 0, tint: 0, fade: 0 };
       renderSliders(); updatePreview();

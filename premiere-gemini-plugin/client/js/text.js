@@ -21,7 +21,7 @@
 
   function load() {
     try { R = Object.assign({}, T().DEFAULT, JSON.parse(localStorage.getItem(LS) || "null") || {}); } catch (e) { R = Object.assign({}, T().DEFAULT); }
-    kind = T().is3D(R) ? "3d" : "2d";
+    kind = T().byId(R.template).kind;
   }
   function save() { try { localStorage.setItem(LS, JSON.stringify(R)); } catch (e) { /* e'tiborsiz */ } }
 
@@ -57,7 +57,17 @@
       const id = b.dataset.id, c = b.querySelector("canvas");
       if (thumbsDone[id]) { c.getContext("2d").drawImage(thumbsDone[id], 0, 0); return; }
       const tp = T().byId(id);
-      const rec = T().recipeFor(id, { text: tp.kind === "3d" ? "3D" : id === "lowerthird" ? "Ism Familiya" : "MATN", sub: "Lavozim", duration: 3, size: tp.kind === "3d" ? 0.42 : id === "lowerthird" ? 0.12 : 0.24, x: id === "lowerthird" ? 0.1 : 0.5, y: id === "lowerthird" ? 0.55 : 0.5 });
+      const sample = { "3d": "3D", plate: "MATN", wedding: "A & M", bg: "" }[tp.kind];
+      const lower = tp.oneLine && tp.sub && tp.id !== "plate_subscribe";
+      const base = { duration: 3, x: lower ? 0.1 : 0.5, y: lower ? 0.55 : 0.5 };
+      if (sample != null) base.text = sample;
+      if (tp.kind === "2d") Object.assign(base, { text: lower ? "Ism Familiya" : "MATN", sub: "Lavozim", size: lower ? 0.12 : 0.24 });
+      if (tp.kind === "3d") base.size = 0.42;
+      if (tp.kind === "plate") Object.assign(base, { text: tp.id === "plate_chat" ? "Salom!\nQalaysiz?" : tp.id === "plate_subscribe" ? "OBUNA" : "MATN", size: tp.id === "plate_chat" ? 0.12 : 0.16, sub: tp.id === "plate_subscribe" ? "TAYYOR" : "Lavozim" });
+      if (tp.kind === "wedding") Object.assign(base, { size: 0.3, sub: "" });
+      const rec = T().recipeFor(id, base);
+      if (tp.kind === "plate" || tp.kind === "wedding") { rec.text = base.text; rec.size = base.size; } // qisqa namuna - kartada katta ko'rinsin
+      if (tp.kind === "plate" && !/chat|subscribe/.test(id)) rec.size = 0.26;
       const off = document.createElement("canvas"); off.width = 192; off.height = 108;
       try {
         if (tp.kind === "3d") {
@@ -65,7 +75,7 @@
           thumb3d.r.draw(rec, 1.6);
           off.getContext("2d").drawImage(thumb3d.cv, 0, 0);
         } else {
-          T().draw2D(off, rec, id === "kinetic" ? 2.2 : 1.4);
+          T().draw2D(off, rec, id === "kinetic" ? 2.2 : id === "plate_subscribe" ? 2.2 : tp.kind === "bg" ? 2.4 : 1.6);
         }
       } catch (e) { /* WebGL yo'q - bo'sh karta */ }
       thumbsDone[id] = off;
@@ -88,7 +98,7 @@
   function setKind(k) {
     kind = k;
     document.querySelectorAll("#txKind button").forEach((b) => b.classList.toggle("on", b.dataset.v === k));
-    document.querySelectorAll("#view-text [data-kind]").forEach((el) => { el.hidden = el.dataset.kind !== k; });
+    document.querySelectorAll("#view-text [data-kind]").forEach((el) => { el.hidden = !el.dataset.kind.split(" ").includes(k); });
     if (T().byId(R.template).kind !== k) pickTemplate(T().TEMPLATES.find((t) => t.kind === k).id);
     renderGrid();
   }
@@ -101,12 +111,13 @@
     ["txSize", "size", "num"], ["txSpacing", "spacing", "num"], ["txShadow", "shadow", "num"], ["txStroke", "stroke", "num"], ["txGlow", "glow", "num"],
     ["txMaterial", "material", "value"], ["txLiquid", "liquid", "num"], ["txFlow", "flow", "num"], ["txDepth", "depth", "num"], ["txRot", "rot", "num"],
     ["txBevel", "bevel", "num"], ["txDrops", "drops", "checked"], ["txX", "x", "num"], ["txY", "y", "num"], ["txDur", "duration", "num"], ["txSpeed", "speed", "num"],
+    ["txNoText", "noText", "checked"], ["txPadX", "padX", "num"], ["txPadY", "padY", "num"], ["txDensity", "density", "num"],
   ];
 
   function syncControls() {
     BIND.forEach(([id, key, prop]) => { const el = $(id); if (!el) return; if (prop === "checked") el.checked = !!R[key]; else el.value = R[key]; });
     document.querySelectorAll("#txWeight button").forEach((b) => b.classList.toggle("on", Number(b.dataset.v) === Number(R.weight) || (Number(b.dataset.v) === 700 && R.weight >= 600 && R.weight < 850) || (Number(b.dataset.v) === 900 && R.weight >= 850)));
-    $("txSubWrap").hidden = R.template !== "lowerthird";
+    $("txSubWrap").hidden = !T().byId(R.template).sub;
     $("txSizeVal").textContent = Math.round(R.size * 1000) / 10 + "%";
     $("txDurVal").textContent = Number(R.duration).toFixed(1) + "s";
     document.querySelectorAll("#txPos button").forEach((b) => b.classList.toggle("on", Math.abs(Number(b.dataset.x) - R.x) < 0.02 && Math.abs(Number(b.dataset.y) - R.y) < 0.02));
@@ -208,7 +219,7 @@
       R = Object.assign({}, T().DEFAULT, rec);
       save();
       editing = { track: r.track, start: r.start };
-      setKind(T().is3D(R) ? "3d" : "2d");
+      setKind(T().byId(R.template).kind);
       syncControls();
       $("txInsert").querySelector("span").textContent = "Yangilash (almashtirish)";
       $("txStopEdit").hidden = false;
@@ -237,12 +248,12 @@
     btn.disabled = true;
     status("AI matn va uslubni tanlamoqda…");
     try {
-      const ids = T().TEMPLATES.map((t) => t.id);
+      const ids = T().TEMPLATES.filter((t) => t.kind !== "bg").map((t) => t.id);
       const tr = (window.GCApplication.transcript() || []).filter((s) => s.type === "speech").map((s) => s.text).join(" ").slice(0, 1500);
       const r = await window.GCAI.text({
         settings: window.GCApplication.settings(),
         system: "You design animated titles for short videos. Pick one template id and write the on-screen text (max 6 words per line, max 2 lines) in the user's language. Colours as #rrggbb with strong contrast for video.",
-        prompt: `Templates: ${T().TEMPLATES.map((t) => `${t.id} (${t.kind}, ${t.desc})`).join("; ")}\n` + (tr ? `Video speech: ${tr}\n` : "") + `Request: ${q}`,
+        prompt: `Templates: ${T().TEMPLATES.filter((t) => t.kind !== "bg").map((t) => `${t.id} (${t.kind}, ${t.desc})`).join("; ")}\n` + (tr ? `Video speech: ${tr}\n` : "") + `Request: ${q}`,
         schema: { type: "object", properties: {
           template: { type: "string", enum: ids }, text: { type: "string" }, sub: { type: "string", description: "Second line for lowerthird, else empty." },
           color: { type: "string" }, color2: { type: "string" }, accent: { type: "string" } } },
@@ -252,7 +263,7 @@
       R = T().recipeFor(r.template, { text: r.text, sub: r.sub || "", duration: R.duration, speed: R.speed });
       R.color = hex(r.color, R.color); R.color2 = hex(r.color2, R.color2); R.accent = hex(r.accent, R.accent);
       save();
-      setKind(T().is3D(R) ? "3d" : "2d");
+      setKind(T().byId(R.template).kind);
       syncControls();
       t0 = performance.now();
       status("AI tanladi: " + T().byId(R.template).name + ". Kerak bo'lsa sozlang va timeline'ga qo'ying.");

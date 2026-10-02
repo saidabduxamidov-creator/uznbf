@@ -13,7 +13,21 @@ class MediaPoolItem {
   async GetName() { return this.name; }
 }
 
-class Comp { constructor() { this.scripts = []; } async Execute(s) { this.scripts.push(s); return true; } }
+class Comp {
+  constructor() { this.scripts = []; this.lut = null; }
+  async Execute(s) {
+    this.scripts.push(s);
+    // Fusion rang: GCGrade LUT'i va status fayli (haqiqiy Fusion Lua'dagi io.open o'rniga)
+    const lut = /t\.LUTFile = "((?:[^"\\]|\\.)*)"/.exec(s);
+    if (lut) {
+      this.lut = JSON.parse('"' + lut[1] + '"');
+      const st = /io\.open\("((?:[^"\\]|\\.)*)"/.exec(s);
+      if (st) fs.writeFileSync(JSON.parse('"' + st[1] + '"'), this.lut);
+    }
+    if (/"GCGrade"/.test(s) && /t:Delete\(\)/.test(s) && !lut) this.lut = null;
+    return true;
+  }
+}
 
 class TimelineItem {
   constructor(start, end, mpi, sourceStart) {
@@ -36,7 +50,15 @@ class TimelineItem {
   async DeleteVersionByName(n) { if (n === this.cur || !this.versions.includes(n)) return false; this.versions = this.versions.filter((v) => v !== n); delete this.luts[n]; return true; }
   async GetNodeGraph() {
     const it = this;
-    return { async SetLUT(i, p) { if (i !== 1 || !path.isAbsolute(p) || !fs.existsSync(p) || !currentProject || !currentProject.lutRefreshed) return false; it.luts[it.cur] = p; return true; } };
+    return {
+      async GetNumNodes() { return currentProject.emptyVersions && it.cur !== 'Version 1' ? 0 : 1; },
+      async SetLUT(i, p) {
+        if (i !== 1 || !path.isAbsolute(p) || !fs.existsSync(p) || !currentProject || !currentProject.lutRefreshed) return false;
+        if (currentProject.silentLut) return true; // "true" qaytaradi, lekin qo'ymaydi (haqiqiy muammo taqlidi)
+        it.luts[it.cur] = p; return true;
+      },
+      async GetLUT(i) { return it.luts[it.cur] || ''; },
+    };
   }
   async SetCDL(m) { this.cdl = m; return true; }
 }
