@@ -25,6 +25,12 @@ class Comp {
       if (st) fs.writeFileSync(JSON.parse('"' + st[1] + '"'), this.lut);
     }
     if (/"GCGrade"/.test(s) && /t:Delete\(\)/.test(s) && !lut) this.lut = null;
+    // tahrirlanadigan matn/logo: Lua oxirida status fayliga "ok" yoziladi (nativeFail - Fusion xatosi taqlidi)
+    if (/"GCKorinish"/.test(s) && /local function finish/.test(s)) {
+      const st = /io\.open\("((?:[^"\\]|\\.)*)"/.exec(s);
+      this.native = currentProject.nativeFail ? null : (/add\("Renderer3D"/.test(s) ? 'logo' : 'text');
+      if (st) fs.writeFileSync(JSON.parse('"' + st[1] + '"'), currentProject.nativeFail ? 'xato: TextPlus vositasi qo\'shilmadi' : 'ok\n');
+    } else if (/mo\.Input = mi\.Output/.test(s) && /GCMatn/.test(s)) this.native = null;
     return true;
   }
 }

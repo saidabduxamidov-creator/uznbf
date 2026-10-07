@@ -825,7 +825,80 @@ void main(){
     return { first: files[0], count: n, files };
   }
 
+  /*
+   * Tahrirlanadigan (native) qo'yish uchun tavsif: After Effects (matn/shape/3D qatlamlar) va
+   * DaVinci Resolve (Fusion Text+ / 3D) shu tavsifdan o'z vositalarini quradi.
+   * anim - harakat turi, bg - matn orqasidagi fon (dastur o'zida tahrirlanadi, matnga moslashadi).
+   * 3D suyuq matnlar (WebGL) native ko'rinishda yo'q - ular faqat kadrlar (PNG).
+   */
+  const NATIVE = {
+    pop: ["pop"], rise: ["rise"], typewriter: ["typewriter"], blur: ["blur"], kinetic: ["pop"], wave: ["pop"],
+    highlight: ["rise", { shape: "rect", fill: "accent", radius: 0 }], neon: ["fade"], glitch: ["strobe"], shine: ["fade"], split: ["rise"],
+    lowerthird: ["slide", { shape: "bar", fill: "accent" }],
+    plate_glass: ["rise", { shape: "rect", fill: "accent", opacity: 30, radius: 0.35, stroke: "#ffffff" }],
+    plate_bubble3d: ["pop", { shape: "rect", fill: "accent", radius: 0.45 }],
+    plate_pill: ["pop", { shape: "rect", fill: "accent", radius: 1 }],
+    plate_ribbon: ["slide", { shape: "rect", fill: "accent", radius: 0 }],
+    plate_card3d: ["pop", { shape: "rect", fill: "accent", radius: 0.3 }],
+    plate_neon: ["fade", { shape: "rect", stroke: "color2", radius: 0.3 }],
+    plate_sticker: ["slam", { sticker: true }],
+    plate_chat: ["pop", { shape: "rect", fill: "accent", radius: 1 }],
+    plate_subscribe: ["pop", { shape: "rect", fill: "accent", radius: 0.2 }],
+    plate_quote: ["fade", { shape: "rect", fill: "#0e0f14", opacity: 62, radius: 0.3 }],
+    plate_lowerglass: ["slide", { shape: "rect", fill: "#ffffff", opacity: 24, radius: 0.25 }],
+    gym_slam: ["slam"], gym_banner: ["slide", { shape: "slant", fill: "accent" }], gym_stack: ["slide"], gym_counter: ["counter"],
+    gym_timer: ["timer"], gym_speed: ["slide"], gym_pulse: ["pulse"], gym_fill: ["fade"], gym_strobe: ["strobe"],
+    gym_lower: ["slide", { shape: "slant", fill: "accent" }], gym_motiv: ["pop"], gym_set: ["rise"],
+  };
+  /* Resolve (Fusion Text+) da matn ichidagi raqam/harf animatsiyasi yo'q - ular PNG bo'lib qo'yiladi */
+  const NATIVE_NO_RESOLVE = ["typewriter", "counter", "timer"];
+  const nativeSupported = (R, app) => {
+    if (byId(R.template).logo) return true;
+    const m = NATIVE[R.template];
+    return !!m && !(app === "resolve" && NATIVE_NO_RESOLVE.includes(m[0]));
+  };
+
+  /* Plagin ichidagi assets/... yo'lini diskdagi to'liq yo'lga aylantiradi (hostlar uchun) */
+  function assetPath(src) {
+    if (!src || /^([A-Za-z]:[\\/]|\/|\\\\)/.test(src)) return src;
+    try {
+      let file = decodeURIComponent(new URL(src, root.location.href).pathname);
+      if (/^\/[A-Za-z]:\//.test(file)) file = file.slice(1).replace(/\//g, "\\");
+      return file;
+    } catch (e) { return src; }
+  }
+
+  /* Kadr o'lchamida matnning haqiqiy o'lchami (uzun matn kichraytiriladi) - native qatlamlar uchun */
+  function nativeMeasure(R, W, H) {
+    try {
+      const c = root.document.createElement("canvas"); c.width = 8; c.height = 8;
+      const L = layout(c.getContext("2d"), R, W, H);
+      return { size: L.size / H, box: [L.blockW, L.blockH] };
+    } catch (e) { return null; }
+  }
+
+  function nativeSpec(R) {
+    const tp = byId(R.template);
+    const P = phases(R, 0);
+    const base = { template: tp.id, name: tp.name, duration: R.duration, inDur: P.inD, outDur: P.outD, speed: R.speed || 1, x: R.x, y: R.y, size: R.size };
+    if (tp.logo) return Object.assign(base, { logo: R.logo, depth: R.depth, rot: R.rot, bevel: R.bevel });
+    const [anim, bgDef] = NATIVE[tp.id] || ["fade"];
+    let bg = null;
+    if (bgDef && !bgDef.sticker) {
+      const col = (k) => (k === "accent" ? R.accent : k === "color2" ? R.color2 : k === "color" ? R.color : k);
+      bg = { shape: bgDef.shape, fill: bgDef.fill ? col(bgDef.fill) : "", stroke: bgDef.stroke ? col(bgDef.stroke) : "", opacity: bgDef.opacity || 100,
+        radius: bgDef.radius || 0, padX: (bgDef.shape === "bar" ? 0.4 : 0.6) * (R.padX || 1), padY: 0.3 * (R.padY || 1) };
+    }
+    const text = R.upper ? String(R.text || "").toLocaleUpperCase() : String(R.text || "");
+    return Object.assign(base, {
+      anim, bg, text: tp.oneLine ? text.split(/\r?\n/)[0] : text, sub: tp.sub && tp.id !== "plate_subscribe" ? R.sub || "" : "",
+      font: R.font, weight: R.weight, italic: !!R.italic, spacing: R.spacing || 0, color: R.color, color2: R.color2, accent: R.accent,
+      stroke: bgDef && bgDef.sticker ? 0 : R.stroke || 0, sticker: !!(bgDef && bgDef.sticker), shadow: R.shadow || 0, glow: R.glow || 0,
+      align: R.align || "center", noText: !!R.noText,
+    });
+  }
+
   root.GCTextFX = { TEMPLATES, FONTS, DEFAULT, byId, recipeFor, layout, draw2D, Renderer3D, textSdf, makeDrawer, render, is3D, phases, register,
-    loadLogo, logoReady,
+    loadLogo, logoReady, nativeSpec, nativeSupported, nativeMeasure, assetPath, NATIVE,
     util: { E, clamp, mix, fontCss, paint, glyph, layout } };
 })(typeof window !== "undefined" ? window : globalThis);

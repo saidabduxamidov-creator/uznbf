@@ -39,7 +39,7 @@
         <div class="logo"><svg><use href="#i-spark"/></svg></div>
         <div>
           <div class="brand-name">GeminiCut</div>
-          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.5</span></div>
+          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.6</span></div>
         </div>
       </div>
       <div class="status">
@@ -364,10 +364,15 @@
           <div class="input-group"><input id="txAsk" placeholder="Masalan: videoga mos qisqa, kuchli sarlavha va uslub" /><button class="btn small primary" id="txAI">Yarat</button></div>
         </div>
         <div class="card tx-actions">
+          <div class="tx-mode" data-host="ae resolve">
+            <div class="segmented" id="txMode"><button data-v="native" class="on">Tahrirlanadigan</button><button data-v="png">Kadrlar (PNG)</button></div>
+            <p class="hint" id="txModeHint"></p>
+          </div>
+          <p class="hint" data-host="ppro">Premiere: joy, o'lcham, aylanish, shaffoflik - Effect Controls (Motion / Opacity) da keyframe bilan. Matn, rang, shablonni o'zgartirish - klipni timeline'da tanlab “Tanlangan matnni tahrirlash”.</p>
           <button class="btn primary big" id="txInsert"><svg><use href="#i-download"/></svg><span>Timeline'ga qo'yish</span></button>
           <div class="tx-progress" id="txProgress" hidden><div class="bar"><i id="txBar"></i></div><span id="txProgLabel"></span><button class="link-btn danger" id="txCancel">To'xtatish</button></div>
           <div class="button-row compact">
-            <button class="link-btn" id="txEdit">Playhead'dagi matnni tahrirlash</button>
+            <button class="link-btn" id="txEdit">Tanlangan matnni tahrirlash</button>
             <button class="link-btn muted" id="txStopEdit" hidden>Tahrirni bekor qilish</button>
             <button class="link-btn muted" id="txFolder">Matnlar papkasi</button>
           </div>
@@ -644,7 +649,7 @@
           <details class="log-box"><summary>Jurnal (diagnostika)</summary><pre id="log"></pre></details>
           <button class="btn ghost" id="btnClearCache">Tahlil keshini tozalash</button>
         </div>
-        <p class="about">GeminiCut <span id="ver">4.5.0</span> &middot; Premiere Pro 2022-2026</p>
+        <p class="about">GeminiCut <span id="ver">4.6.0</span> &middot; Premiere Pro 2022-2026</p>
       </section>
     </main>
 

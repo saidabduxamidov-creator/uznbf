@@ -210,3 +210,36 @@ test('animatsion matn: PNG ketma-ketligi yuqori trekka, tahrir uchun topiladi va
   const t = await host.gc_colorTargets('all');
   assert.strictEqual(t.clips.length, 3);
 });
+
+test('tahrirlanadigan matn: PNG zaxira klipiga Fusion (Text+ / 3D logo) qo\'shiladi; Fusion xato bersa PNG qoladi', async () => {
+  const env = setup();
+  const { host, tl } = env;
+  const dir = path.join(tmp(), 'GeminiCut', 'Matn', 'n');
+  fs.mkdirSync(dir, { recursive: true });
+  for (let i = 0; i < 50; i++) fs.writeFileSync(path.join(dir, 'gc_' + String(i).padStart(4, '0') + '.png'), 'x');
+  ['textfx.js', 'textfx-plates.js', 'textfx-gym.js'].forEach((f) => require('../../premiere-gemini-plugin/client/js/' + f));
+  const FX = globalThis.GCTextFX;
+  const spec = Object.assign(FX.nativeSpec(Object.assign(FX.recipeFor('gym_banner'), { text: 'CHIMGAN', duration: 2 })), { W: 1920, H: 1080 });
+  let r = await host.gc_insertNative(spec, path.join(dir, 'gc_0000.png'), 50, 25, -1, null, 'Matn');
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(r.mode, 'native', r.reason); assert.strictEqual(r.track, 1);
+  const it = tl.tracks.video[1][0];
+  assert.strictEqual(it.comps.length, 1); assert.strictEqual(it.comps[0].native, 'text');
+  assert.match(it.comps[0].scripts[0], /text\("GCMatn", "CHIMGAN"/);
+  // 3D logo
+  const logo = Object.assign(FX.nativeSpec(FX.recipeFor('logo_malika')), { logo: path.join(dir, 'malika.png'), W: 1920, H: 1080, img: { width: 1400, height: 600 } });
+  r = await host.gc_insertNative(logo, path.join(dir, 'gc_0000.png'), 50, 25, 3, null, 'Logo');
+  assert.strictEqual(r.mode, 'native', r.reason);
+  assert.strictEqual(tl.tracks.video[1].find((x) => x.start === START + 3 * FPS).comps[0].native, 'logo');
+  // Fusion xatosi -> PNG klip o'z holicha (MediaIn1 qayta ulanadi), sababi qaytadi
+  env.project.nativeFail = true;
+  r = await host.gc_insertNative(spec, path.join(dir, 'gc_0000.png'), 50, 25, 12, null, 'Matn 3');
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(r.mode, 'png'); assert.match(r.reason, /TextPlus/);
+  const failed = tl.tracks.video.flat().find((x) => x.start === START + 12 * FPS);
+  assert.ok(failed && /mo\.Input = mi\.Output/.test(failed.comps[0].scripts[1]), 'PNG qayta ulandi');
+  // tahrirlash: playhead ostidagi matn (recipe.json PNG papkasida)
+  tl.ph = START + 8 * FPS + 5;
+  const at = await host.gc_textAtPlayhead();
+  assert.ok(at.ok, at.error); assert.match(at.path, /Matn/);
+});

@@ -16,7 +16,8 @@
 
   /* JS qiymatni ExtendScript (ES3) uchun xavfsiz literalga aylantiradi */
   function literal(v) {
-    return JSON.stringify(v).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+    // ASCII bo'lmagan belgilar \uXXXX bo'lib uzatiladi (tizim kodlashiga bog'liq bo'lmasin)
+    return JSON.stringify(v).replace(/[\u007f-\uffff]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
   }
 
   function evalScript(script, timeoutMs) {

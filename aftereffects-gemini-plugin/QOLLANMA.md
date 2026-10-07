@@ -27,7 +27,8 @@ Interfeys Premiere versiyasi bilan bir xil, faqat After Effects tilida:
 | Zoom / motion / Claude / ChatGPT | Scale, Position, Rotation, Opacity keyframe'lari (kompozitsiya vaqtida) |
 | Pauzalarni kesish | Barcha qulflanmagan qatlamlar bo'laklarga bo'linadi, chapga suriladi, kompozitsiya qisqaradi |
 | SFX | Audio qatlam, Project panelida "GeminiCut SFX" papkasi |
-| Animatsion matn / Gym / 3D logo | PNG ketma-ketligi eng yuqori qatlam bo'lib ("GeminiCut Matn" papkasi) |
+| Animatsion matn / Gym / fonli matn | **Tahrirlanadigan** rejimi (standart): AE'ning o'z **matn qatlami** + fon uchun **Shape qatlam** (matnga bog'langan, o'lchami matnga o'zi moslashadi) + oddiy keyframe animatsiya. **Kadrlar (PNG)** rejimi: PNG ketma-ketligi ("GeminiCut Matn" papkasi) |
+| 3D logo | **Null** ("GeminiCut Logo: …", "Qalinlik" slayderi) + 12 ta 3D qatlam (asl PNG, orqadagilari qoraytirilgan); aylanish/o'lcham/joy — Null'ning Transform'ida |
 | Video AI (Veo / Flow) | Yangi qatlam, audiosi o'chiq |
 | Rang berish (ChatGPT) | Faqat DaVinci Resolve versiyasida |
 
@@ -48,3 +49,11 @@ node --test aftereffects-gemini-plugin/tests/*.test.cjs
 node aftereffects-gemini-plugin/tests/ui.e2e.cjs      # Chromium + AE taqlidi
 ```
 Interfeys `premiere-gemini-plugin/client` dan olinadi; `cep.js` dastur nomini (PPRO/AEFT) aniqlab `body` ga `ppro`/`ae` klassini qo'yadi.
+
+## After Effects'ning o'zida tahrirlash
+- Matnni kompozitsiyada ikki marta bosib yozing; shrift, rang, o'lcham, kontur — **Character** paneli.
+- Fon (Shape qatlam) matn uzunligi va shrift o'lchamiga ifoda orqali o'zi moslashadi.
+- Animatsiya — oddiy keyframe'lar (Graph Editor'da tahrirlanadi); sanagich/taymer/yozuv — Source Text ifodasi.
+- Panel orqali qayta tahrirlash: matn yoki logo qatlamini tanlang → **Tanlangan matnni tahrirlash** →
+  o'zgartirib **Yangilash** (butun guruh o'sha vaqtda almashtiriladi).
+- 3D suyuq matnlar (oltin, xrom, jele…) faqat kadrlar (PNG) bo'lib qo'yiladi.

@@ -45,6 +45,7 @@ async function hostCall(fn, args) {
   walk(mapped);
   if (/^gc_(insertSound|importSrt|flowImport)$/.test(fn)) fs.writeFileSync(mapped[0], 'x');
   if (fn === 'gc_importSequence') { const d = path.dirname(mapped[0]); for (let i = 0; i < mapped[1]; i++) fs.writeFileSync(path.join(d, 'gc_' + String(i).padStart(4, '0') + '.png'), 'x'); }
+  if (fn === 'gc_insertNative') { const d = path.dirname(mapped[1]); for (let i = 0; i < mapped[2]; i++) fs.writeFileSync(path.join(d, 'gc_' + String(i).padStart(4, '0') + '.png'), 'x'); }
   return fromReal(await host[fn](...mapped));
 }
 
@@ -205,6 +206,21 @@ const ELECTRON = `(function () {
   await page.waitForFunction(() => /✓|XATO|qo'yilmadi|topilmadi/i.test(document.getElementById('txStatus').textContent), null, { timeout: 240000 }).catch(() => {});
   const vt = nt.tracks.video[nt.tracks.video.length - 1];
   check(nt.tracks.video.length === before + 1 && vt.length === 1 && vt[0].end - vt[0].start === 25 && /Matn/.test(vt[0].mpi.file), '3D jele matn yangi yuqori trekka (25 kadr): ' + await page.textContent('#txStatus'));
+  check(await page.isVisible('#txMode') && /PNG/.test(await page.textContent('#txModeHint')), '3D suyuq matn: PNG bo\'lishi aytiladi');
+  // tahrirlanadigan (Fusion Text+) gym banner
+  await page.click('#txKind [data-v="gym"]');
+  await page.waitForTimeout(800);
+  await page.click('.tx-card[data-id="gym_banner"]');
+  await page.fill('#txText', 'CHIMGAN');
+  await page.evaluate(() => { const r = window.GCText.recipe(); r.duration = 1; window.GCText.setRecipe(r); });
+  check(/Fusion/.test(await page.textContent('#txModeHint')), 'tahrirlanadigan rejim: Fusion izohi');
+  r.tl.ph = START + 20 * FPS;
+  await page.evaluate(() => window.GCApplication.timelineChanged && window.GCApplication.timelineChanged());
+  await page.click('#txInsert');
+  await page.waitForFunction(() => /✓|XATO|qo'yilmadi|topilmadi/i.test(document.getElementById('txStatus').textContent), null, { timeout: 240000 }).catch(() => {});
+  const nat = nt.tracks.video.flat().find((it) => it.comps.some((c) => c.native === 'text'));
+  check(!!nat && /GCMatn", "CHIMGAN"/.test(nat.comps[0].scripts[0]) && /Fusion sahifasida/.test(await page.textContent('#txStatus')), 'gym banner Fusion Text+ bilan qo\'yildi: ' + await page.textContent('#txStatus'));
+  await shot('r08-matn-native');
 
   console.log('Subtitr');
   await tab('subs');

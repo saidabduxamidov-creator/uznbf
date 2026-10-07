@@ -52,6 +52,19 @@ Premiere versiyasidagi bilan bir xil: 12 ta 2D shablon, 11 ta fonli matn (shaffo
 boshqalar, matnsiz rejim bilan), 12 ta Gym shabloni va 3D bo'limi: FitCity logolari (asl rang va shaklda 3D),
 o'z logongizni yuklash va 11 ta 3D matn.
 
+### Resolve'ning o'zida tahrirlash (Fusion)
+**Tahrirlanadigan** rejimida (standart) matn va logolar Fusion vositalari bilan quriladi:
+- Klipni tanlang → **Fusion** sahifasi. Tugunlar: **GCMatn** (Text+ — matn, shrift, rang, o'lcham, kontur,
+  soya), **GCOstMatn** (ikkinchi qator), **GCPlashka / GCPlashkaShakl** (fon va uning o'lchami, burchak
+  yumaloqligi), **GCHarakat** (animatsiya keyframe'lari), **GCKorinish** (paydo bo'lish/yo'qolish — Blend).
+- 3D logo: **GCLogoRasm** (asl PNG), **GCLogoQatlam0…11** (qalinlik qatlamlari), **GCLogo3D** (aylanish,
+  o'lcham, joy — Transform 3D), **GCLogoRender**.
+- Edit sahifasidagi Inspector (Zoom, Position, Opacity, keyframe'lar) ham ishlaydi.
+- Kadrlar zaxira sifatida **MediaIn1** da turadi: Fusion biror sababga ko'ra qurilmasa, panel buni aytadi
+  va klip PNG bo'lib qoladi. **Kadrlar (PNG)** rejimi — natija aynan oldindan ko'rishdagidek.
+- Sanagich, taymer, yozuv mashinkasi va 3D suyuq matnlar Resolve'da doim kadrlar (PNG) bo'lib qo'yiladi.
+- Panel orqali qayta tahrirlash: playhead'ni matn ustiga qo'yib **Tanlangan matnni tahrirlash**.
+
 ## Boshqa kompyuterga berish
 - Faqat `GeminiCut-Resolve-Setup.bat` faylini yuboring. Kerak: **DaVinci Resolve Studio 20+** (bepul
   versiyada Workflow Integration menyusi yo'q — bu Blackmagic cheklovi).

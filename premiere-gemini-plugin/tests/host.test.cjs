@@ -137,6 +137,12 @@ test('animatsion matn: PNG ketma-ketligi bin\'ga, kliplardan yuqori trekka, alma
   assert.ok(r.ok, r.error);
   assert.strictEqual(env.seq.videoTracks[2].items.length, 1, 'eski matn o\'rniga yangisi');
   assert.strictEqual(v1.items.length, 3, 'video kliplarga tegilmadi');
+  // timeline'da tanlangan matn playhead'dan ustun (playhead boshqa joyda bo'lsa ham)
+  env.seq.videoTracks[1].items[0].selected = true;
+  env.seq.setPlayerPosition && env.seq.setPlayerPosition('0');
+  const sel = host.call('gc_textAtPlayhead');
+  assert.ok(sel.ok, sel.error); assert.strictEqual(sel.track, 1); assert.strictEqual(sel.selected, true);
+  env.seq.videoTracks[1].items[0].selected = false;
   const c = host.call('gc_colorTargets', 'all');
   assert.strictEqual(c.ok, false); assert.match(c.error, /Resolve/);
 });

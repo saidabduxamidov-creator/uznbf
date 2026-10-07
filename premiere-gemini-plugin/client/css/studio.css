@@ -277,3 +277,6 @@ body.ae [data-host]:not([data-host~="ae"]) {display:none !important;}
 .gc-summary {margin:10px 0 0;padding:9px 11px;border-radius:9px;background:#1a1f2c;border:1px solid #2c3550;font-size:12px;}
 .gc-slider {margin-bottom:8px;}
 .gc-actions .btn + .btn {margin-top:8px;}
+.tx-mode {margin-bottom:10px;}
+.tx-mode .segmented {width:100%;}
+.tx-actions .hint {font-size:11px;color:var(--faint);line-height:1.45;margin:6px 0 10px;}

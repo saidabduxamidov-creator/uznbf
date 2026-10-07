@@ -13,7 +13,21 @@ const lua = h.buildMotionLua({ size: [[0, 1], [9, 1.15], [50, 1]], center: [[0, 
 const lua2 = h.buildMotionLua({ size: [[0, 1], [20, 1.2]] });
 const st = require('path').join(require('os').tmpdir(), 'gc_grade_status.txt');
 try { require('fs').unlinkSync(st); } catch (e) {}
-console.log(JSON.stringify({ lua, lua2, reset: h.buildResetLua(), grade: h.buildGradeLua('C:\\LUT\\GeminiCut\\GC_a.cube', st), gradeReset: h.buildGradeResetLua(), status: st }));
+const cj = require('path').join(require('path').dirname(process.argv[1]), '..', 'premiere-gemini-plugin', 'client', 'js');
+['textfx.js', 'textfx-plates.js', 'textfx-gym.js'].forEach((f) => require(require('path').join(cj, f)));
+const FX = globalThis.GCTextFX;
+const sp = (id, x) => FX.nativeSpec(Object.assign(FX.recipeFor(id), x || {}));
+const nst = require('path').join(require('os').tmpdir(), 'gc_native_status.txt');
+const native = {
+  banner: h.buildNativeTextLua(sp('gym_banner', { text: 'CHIMGAN "FIT"' }), 1080, 1920, 25, nst),
+  lower: h.buildNativeTextLua(sp('gym_lower', { text: 'Aziz', sub: 'Trener' }), 1920, 1080, 25, nst),
+  strobe: h.buildNativeTextLua(sp('gym_strobe'), 1080, 1920, 25, nst),
+  blur: h.buildNativeTextLua(sp('blur'), 1920, 1080, 30, nst),
+  neon: h.buildNativeTextLua(sp('plate_neon'), 1920, 1080, 25, nst),
+  logo: h.buildNativeLogoLua(Object.assign(sp('logo_malika'), { logo: 'C:\\GC\\fitcity-malika.png' }), 1080, 1920, 25, nst, { width: 1400, height: 600 }),
+  restore: h.buildNativeRestoreLua(), status: nst,
+};
+console.log(JSON.stringify({ native, lua, lua2, reset: h.buildResetLua(), grade: h.buildGradeLua('C:\\LUT\\GeminiCut\\GC_a.cube', st), gradeReset: h.buildGradeResetLua(), status: st }));
 """
 out = json.loads(subprocess.check_output(["node", "-e", js, os.path.join(here, "..", "host.js")]))
 
@@ -42,6 +56,7 @@ local function Tool(name, kind)
   t.SetAttrs = function(self, a) if a.TOOLS_Name then tools[self.name] = nil; self.name = a.TOOLS_Name; tools[self.name] = self end end
   t.Delete = function(self) inputObj:ConnectTo(nil) tools[self.name] = nil end
   t.GetInput = function(self, k) return rawget(self.values, k) end
+  t.SetInput = function(self, k, v) rawset(self.values, k, v) end
   setmetatable(t, mt)
   tools[name] = t
   return t
@@ -123,6 +138,52 @@ L = run(out["grade"], out["lua"])
 check(L.globals().chainNames() == "MediaIn1 > GCGrade > GCTransform > GCFade", "rang + motion: tartib to'g'ri (" + L.globals().chainNames() + ")")
 L = run(out["lua"], out["grade"], out["gradeReset"])
 check(L.globals().chainNames() == "MediaIn1 > GCTransform > GCFade", "rangni olib tashlash motion'ga tegmaydi (" + L.globals().chainNames() + ")")
+
+# --- tahrirlanadigan (native) matn va 3D logo ---
+nat = out["native"]
+def status():
+    return open(nat["status"]).read() if os.path.exists(nat["status"]) else ""
+def tool(L, name):
+    return L.eval('comp:FindTool("%s")' % name)
+def src(L, name, inp):
+    o = tool(L, name)["values"][inp]
+    return o["tool"]["name"] if o else None
+for key in ["banner", "lower", "strobe", "blur", "neon", "logo"]:
+    if os.path.exists(nat["status"]): os.unlink(nat["status"])
+    L = run(nat[key])
+    g = L.globals()
+    mo_src = L.eval('comp:FindTool("MediaOut1").Input:GetConnectedOutput().tool.name')
+    check(status().startswith("ok") and status().strip() == "ok", key + ": Lua xatosiz, status 'ok' (" + status().strip()[:80] + ")")
+    check(mo_src == "GCKorinish" and src(L, "GCKorinish", "Background") == "GCBosh", key + ": MediaOut1 <- GCKorinish (Merge, shaffof fon)")
+    check(g.keysOf("GCKorinish", "Blend").startswith("1000=0"), key + ": ko'rinish kalitlari (Blend): " + g.keysOf("GCKorinish", "Blend")[:60])
+    check(g.comp.locked == 0, key + ": Lock/Unlock muvozanatda")
+    if key == "logo":
+        check(src(L, "GCKorinish", "Foreground") == "GCHarakat" and L.eval('comp:FindTool("GCHarakat").Input:GetConnectedOutput().tool.name') == "GCLogoRender", "logo: Renderer3D > Transform > Merge")
+        check(src(L, "GCLogoRender", "SceneInput") == "GCLogo3D" and tool(L, "GCLogoRasm")["values"]["Clip"] == "C:\\GC\\fitcity-malika.png", "logo: Loader (asl rasm) > Merge3D > Renderer3D")
+        planes = [tool(L, "GCLogoQatlam%d" % k) for k in range(12)]
+        check(all(p is not None for p in planes) and src(L, "GCLogo3D", "SceneInput12") == "GCLogoQatlam11", "logo: 12 ta ImagePlane3D qatlami Merge3D'ga ulangan")
+        check(planes[0]["values"]["MaterialInput"]["tool"]["name"] == "GCLogoRasm" and planes[5]["values"]["MaterialInput"]["tool"]["name"] == "GCLogoYon", "logo: old qatlam asl rangda, orqadagilari qoraytirilgan")
+        check(g.keysOf("GCLogo3D", "Transform3DOp.Rotate.Y") != "", "logo: Y aylanish kalitlari")
+    else:
+        t = tool(L, "GCMatn")
+        check(t is not None and t["values"]["Font"] and t["values"]["StyledText"], key + ": Text+ (GCMatn): " + str(t["values"]["StyledText"]).replace("\n", " / ") + ", " + str(t["values"]["Font"]))
+    if key == "banner":
+        check(tool(L, "GCMatn")["values"]["StyledText"] == 'CHIMGAN "FIT"', "banner: qo'shtirnoqli matn to'g'ri uzatildi")
+        check(src(L, "GCBirlash", "Background") == "GCPlashka" and src(L, "GCBirlash", "Foreground") == "GCMatn" and tool(L, "GCPlashka")["values"]["EffectMask"]["tool"]["name"] == "GCPlashkaShakl", "banner: fon (Background + RectangleMask) matn ostida")
+        check(g.keysOf("GCHarakat", "Center") != "", "banner: slide - Center kalitlari")
+    if key == "lower":
+        check(src(L, "GCBirlash2", "Foreground") == "GCOstMatn" and tool(L, "GCOstMatn")["values"]["StyledText"] == "Trener", "lower third: ost matn alohida Text+")
+    if key == "strobe":
+        check(g.keysOf("GCKorinish", "Blend").count("=0") > 3, "strob: miltillash kalitlari")
+    if key == "blur":
+        check(g.keysOf("GCXira", "XBlurSize").startswith("1000=30"), "blur: Blur vositasi kalitlari")
+    if key == "neon":
+        check(tool(L, "GCPlashkaShakl")["values"]["Solid"] == 0, "neon: faqat kontur (Solid=0)")
+    if key == "banner":
+        L2 = run(nat[key], nat[key])
+        check(L2.eval('comp:FindTool("MediaOut1").Input:GetConnectedOutput().tool.name') == "GCKorinish" and L2.eval('comp:FindTool("GCMatn2")') is None, "qayta qurish: eski vositalar o'chirilib, yangisi quriladi")
+        L3 = run(nat[key], nat["restore"])
+        check(L3.globals().chainNames() == "MediaIn1" and L3.eval('comp:FindTool("GCMatn")') is None, "zaxira: vositalar o'chirildi, MediaIn1 (PNG) > MediaOut1")
 
 print("\nHammasi muvaffaqiyatli." if ok else "\nXATO bor.")
 sys.exit(0 if ok else 1)

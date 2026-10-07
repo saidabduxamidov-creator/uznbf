@@ -12,7 +12,7 @@
  * Barcha vaqtlar - sequence (timeline) soniyalarida, aks holda aytiladi.
  */
 
-var GC_VERSION = "4.5.0";
+var GC_VERSION = "4.6.0";
 var GC_TICKS = 254016000000;
 
 /* ======================= yordamchi funksiyalar ======================= */
@@ -902,18 +902,33 @@ function gc_importSequence(first, count, fps, at, replace, name) {
 }
 
 /* Playhead ostidagi GeminiCut matni (tahrirlash uchun) */
+/* Tahrirlash uchun matn: avval timeline'da tanlangan GeminiCut matni, bo'lmasa playhead ostidagisi */
+function gc_textPath(it) {
+    if (!it || !it.projectItem) return "";
+    var p = "";
+    try { p = it.projectItem.getMediaPath(); } catch (eP) {}
+    return p && gc_isTextPath(p) ? p : "";
+}
+
 function gc_textAtPlayhead() {
     try {
         var seq = gc_seq();
-        var ph = gc_playhead(seq);
-        for (var v = seq.videoTracks.numTracks - 1; v >= 0; v--) {
-            var it = gc_itemAt(seq.videoTracks[v], ph);
-            if (!it || !it.projectItem) continue;
-            var p = "";
-            try { p = it.projectItem.getMediaPath(); } catch (eP) {}
-            if (p && gc_isTextPath(p)) return gc_ok({ track: v, start: it.start.seconds, end: it.end.seconds, path: p });
+        var v, k, it, p;
+        for (v = seq.videoTracks.numTracks - 1; v >= 0; v--) {
+            var clips = seq.videoTracks[v].clips;
+            for (k = 0; k < clips.numItems; k++) {
+                it = clips[k];
+                var sel = false;
+                try { sel = it.isSelected && it.isSelected(); } catch (eS) {}
+                if (sel && (p = gc_textPath(it))) return gc_ok({ track: v, start: it.start.seconds, end: it.end.seconds, path: p, selected: true });
+            }
         }
-        return gc_fail("Playhead ostida GeminiCut matni yo'q. Playhead'ni matn ustiga qo'ying.");
+        var ph = gc_playhead(seq);
+        for (v = seq.videoTracks.numTracks - 1; v >= 0; v--) {
+            it = gc_itemAt(seq.videoTracks[v], ph);
+            if ((p = gc_textPath(it))) return gc_ok({ track: v, start: it.start.seconds, end: it.end.seconds, path: p });
+        }
+        return gc_fail("GeminiCut matni topilmadi. Matn klipini timeline'da tanlang yoki playhead'ni uning ustiga qo'ying.");
     } catch (e) {
         return gc_fail(e.message || e.toString());
     }

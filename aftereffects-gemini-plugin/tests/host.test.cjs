@@ -160,3 +160,96 @@ test('animatsion matn: PNG ketma-ketligi eng yuqoriga, kadr tezligi, almashtiris
   assert.strictEqual(comp.numLayers, n, 'eskisi o\'rniga'); assert.strictEqual(comp.layer(1).source.name, 'Yangi'); assert.strictEqual(comp.layer(1).inPoint, 8);
   assert.strictEqual(host.call('gc_colorTargets', 'all').ok, false);
 });
+
+/* Panelning haqiqiy shablon -> native spec o'giruvchisi */
+const CLIENT_JS = path.join(__dirname, '..', '..', 'premiere-gemini-plugin', 'client', 'js');
+['textfx.js', 'textfx-plates.js', 'textfx-gym.js'].forEach((f) => require(path.join(CLIENT_JS, f)));
+const FX = globalThis.GCTextFX;
+const specFor = (id, extra) => { const R = Object.assign(FX.recipeFor(id), extra || {}); const s = FX.nativeSpec(R); s.recipe = R; return s; };
+const expr = (p) => p.expression || '';
+
+test('native matn: AE matn qatlami + matnga bog\'langan shape fon + keyframe animatsiya', () => {
+  const { host, comp } = setup();
+  const n0 = comp.numLayers;
+  const r = host.call('gc_insertNative', specFor('gym_banner', { text: 'CHIMGAN', sub: '' }), -1, null);
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(r.native, true); assert.strictEqual(r.track, 0); assert.strictEqual(comp.numLayers, n0 + 2);
+  const T = comp.layer(1), S = comp.layer(2);
+  assert.ok(T.textGroup, 'yuqorida matn qatlami');
+  const doc = T.textGroup.map['ADBE Text Document'].v;
+  assert.strictEqual(doc.text, 'CHIMGAN'); assert.strictEqual(doc.font, 'Bahnschrift-Bold');
+  assert.strictEqual(doc.fontSize, Math.round(FX.recipeFor('gym_banner').size * 1920));
+  assert.deepStrictEqual(doc.fillColor, [1, 1, 1]);
+  assert.strictEqual(T.inPoint, 8); assert.ok(Math.abs(T.outPoint - 8 - FX.recipeFor('gym_banner').duration) < 1e-6);
+  assert.ok(/^GeminiCut:\{/.test(T.comment) && JSON.parse(T.comment.slice(10)).template === 'gym_banner', 'retsept izohda');
+  assert.ok(/sourceRectAtTime/.test(expr(T.transform.map['ADBE Anchor Point'])), 'tayanch nuqta matn markazida');
+  const pos = T.transform.map['ADBE Position'];
+  assert.ok(pos.numKeys === 4 && pos.keyValue(1)[0] < pos.keyValue(2)[0], 'slide: chapdan kiradi');
+  assert.strictEqual(T.transform.map['ADBE Opacity'].numKeys, 4);
+  // fon: shape qatlam, ota - matn, qiyshiq yo'l ifodasi
+  assert.ok(S.contents && S.parent === T && S.name === 'GeminiCut fon');
+  const vec = S.contents.property(1).property('ADBE Vectors Group');
+  assert.ok(/createPath/.test(expr(vec.property('ADBE Vector Shape - Group').property('ADBE Vector Shape'))), 'qiyshiq fon');
+  assert.deepStrictEqual(vec.property('ADBE Vector Graphic - Fill').property('ADBE Vector Fill Color').v, [232 / 255, 0, 28 / 255]);
+  assert.strictEqual(expr(S.transform.map['ADBE Opacity']), 'thisLayer.parent.transform.opacity');
+  assert.strictEqual(T.effects.children.some((e) => e.matchName === 'ADBE Drop Shadow'), FX.recipeFor('gym_banner').shadow > 0, 'soya faqat kerak bo\'lsa');
+});
+
+test('native matn: plashka (yumaloq), ost matn, sanagich/taymer/yozuv mashinkasi ifodalari', () => {
+  const { host, comp } = setup();
+  let r = host.call('gc_insertNative', specFor('plate_pill', { text: 'Obuna bo\'ling' }), 2, null);
+  assert.ok(r.ok, r.error);
+  const S = comp._layers.find((l) => l.name === 'GeminiCut fon');
+  const rect = S.contents.property(1).property('ADBE Vectors Group').property('ADBE Vector Shape - Rect');
+  assert.ok(/\[w,h\]/.test(expr(rect.property('ADBE Vector Rect Size'))) && /\*1;$/.test(expr(rect.property('ADBE Vector Rect Roundness'))), 'pill: to\'liq yumaloq');
+  r = host.call('gc_insertNative', specFor('gym_lower', { text: 'Aziz', sub: 'Trener' }), 4, null);
+  assert.ok(r.ok, r.error);
+  const sub = comp._layers.find((l) => l.name === 'GeminiCut ost matn');
+  assert.ok(sub && sub.parent === comp.layer(1) && sub.textGroup.map['ADBE Text Document'].v.text === 'Trener');
+  assert.strictEqual(comp.layer(1).textGroup.map['ADBE Text Document'].v.justification, 7414, 'chapga tekislangan');
+  for (const [id, re] of [['gym_counter', /replace/], ['gym_timer', /Math\.ceil/], ['typewriter', /substr/]]) {
+    r = host.call('gc_insertNative', specFor(id), 6, null);
+    assert.ok(r.ok, r.error);
+    assert.ok(re.test(expr(comp.layer(1).textGroup.map['ADBE Text Document'])), id + ' ifodasi');
+    if (id === 'typewriter') assert.ok(comp.layer(1).effects.children.some((e) => e.matchName === 'ADBE Drop Shadow'), 'soya effekti');
+  }
+  // ifodalar - ASCII va ES3 sintaksisi (AE ikkala ifoda dvigateli uchun)
+  comp._layers.forEach((l) => [l.transform, l.textGroup].filter(Boolean).forEach((g) => Object.values(g.map).forEach((p) => {
+    if (p.expression) assert.doesNotThrow(() => new Function('value', 'time', 'inPoint', 'outPoint', 'thisComp', 'thisLayer', 'sourceRectAtTime', 'linear', 'ease', 'add', 'mul', p.expression));
+  })));
+});
+
+test('native 3D logo: Null boshqaruvchi + 3D nusxalar, qalinlik slayderi, almashtirish va tahrirlash', () => {
+  const env = setup();
+  const { host, comp } = env;
+  const logo = path.join(env.dir, 'fitcity-malika.png');
+  fs.writeFileSync(logo, 'PNG');
+  const n0 = comp.numLayers;
+  const r = host.call('gc_insertNative', specFor('logo_malika', { logo }), -1, null);
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(comp.numLayers, n0 + 13);
+  const N = comp.layer(1);
+  assert.ok(N.isNull && N.threeDLayer && /Malika/.test(N.name));
+  assert.strictEqual(N.effects.property(1).name, 'Qalinlik');
+  assert.ok(N.effects.property(1).property('ADBE Slider Control-0001').v > 0);
+  const copies = comp._layers.filter((l) => l.parent === N);
+  assert.strictEqual(copies.length, 12);
+  assert.ok(copies.every((l) => l.threeDLayer && /Qalinlik/.test(expr(l.transform.map['ADBE Position']))));
+  assert.strictEqual(comp.layer(2).name, 'GeminiCut logo (old tomon)');
+  assert.ok(N.transform.map['ADBE Rotate Y'].numKeys === 4 && /Math\.sin/.test(expr(N.transform.map['ADBE Rotate Y'])));
+  // tanlangan logo qatlamidan tahrirlash -> retsept qaytadi
+  comp._layers.forEach((l) => { l.selected = false; }); comp.layer(5).selected = true; comp.time = 0;
+  const at = host.call('gc_textAtPlayhead');
+  assert.ok(at.ok, at.error); assert.strictEqual(at.native, true); assert.strictEqual(JSON.parse(at.recipe).template, 'logo_malika');
+  // almashtirish: butun guruh o'chadi, yangi matn o'sha vaqtda
+  const r2 = host.call('gc_insertNative', specFor('pop', { text: 'YANGI' }), -1, { track: at.track, start: at.start });
+  assert.ok(r2.ok, r2.error);
+  assert.strictEqual(comp.numLayers, n0 + 1); assert.strictEqual(comp.layer(1).inPoint, 8);
+  assert.ok(!comp._layers.some((l) => /logo/i.test(l.name)));
+  // native -> PNG ketma-ketligi bilan almashtirish ham ishlaydi
+  const d = path.join(env.dir, 'Matn', 'x'); fs.mkdirSync(d, { recursive: true });
+  for (let i = 0; i < 10; i++) fs.writeFileSync(path.join(d, 'gc_' + String(i).padStart(4, '0') + '.png'), 'x');
+  const r3 = host.call('gc_importSequence', path.join(d, 'gc_0000.png'), 10, 25, -1, { track: 0, start: 8 }, 'PNG');
+  assert.ok(r3.ok, r3.error);
+  assert.strictEqual(comp.numLayers, n0 + 1); assert.strictEqual(comp.layer(1).source.name, 'PNG');
+});

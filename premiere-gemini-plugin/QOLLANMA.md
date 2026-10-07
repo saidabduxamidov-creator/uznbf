@@ -69,7 +69,13 @@ Timeline'da klipni tanlang va oddiy so'z bilan yozing, masalan: *"yuziga sekin z
   tezlik. Hammasi jonli oldindan ko'rishda darhol ko'rinadi (**Kadr foni** — videongiz ustida ko'rish).
 - **Timeline'ga qo'yish** — plagin har bir kadrni shaffof PNG qilib chizadi va playhead joyiga,
   videodan yuqoridagi bo'sh trekka qo'yadi (`Documents\GeminiCut\Matn`).
-- **Playhead'dagi matnni tahrirlash** — sozlamalari qaytadi, o'zgartirib **Yangilash** — o'sha joyda almashadi.
+- **Tanlangan matnni tahrirlash** — matn klipini timeline'da tanlang (yoki playhead'ni ustiga qo'ying):
+  sozlamalari panelga qaytadi, o'zgartirib **Yangilash** — o'sha joyda almashadi.
+- **Premiere'ning o'zida:** qo'yilgan matn/logo oddiy klip — joy, o'lcham, aylanish, shaffoflik va ularning
+  keyframe'lari **Effect Controls → Motion / Opacity** da; kesish, cho'zish, ko'chirish — timeline'da.
+  Matn so'zini, shriftini, shablonni Premiere o'zgartira olmaydi (Adobe skript API'si maxsus grafikani
+  yaratishga ruxsat bermaydi) — buni panel qiladi. After Effects va Resolve versiyalarida matn to'liq
+  muharrirning o'z qatlamlari bo'lib qo'yiladi.
 - **AI yordamchi** — "videoga mos sarlavha" kabi topshiriq: AI matn, shablon va ranglarni tanlaydi.
 
 ### ChatGPT

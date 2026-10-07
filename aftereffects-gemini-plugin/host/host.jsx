@@ -12,7 +12,7 @@
  * Barcha vaqtlar - kompozitsiya soniyalarida.
  */
 
-var GC_VERSION = "4.5.0";
+var GC_VERSION = "4.6.0";
 var GC_LAST_COMP_ID = 0;
 
 /* ======================= yordamchilar ======================= */
@@ -668,15 +668,12 @@ function gc_importSequence(first, count, fps, at, replace, name) {
             try { item.mainSource.alphaMode = AlphaMode.STRAIGHT; } catch (eM) {}
             try { if (name) item.name = name; } catch (eN) {}
             try { item.parentFolder = gc_folder("GeminiCut Matn"); } catch (eP) {}
-            var time = at >= 0 ? at : comp.time, old = null;
-            if (replace && replace.track >= 0 && replace.track < comp.numLayers) {
-                old = gc_layerByStart(comp, replace.track, replace.start) || comp.layer(replace.track + 1);
-                if (old && !gc_isTextPath(gc_layerPath(old))) old = null;
-                if (old) time = old.inPoint;
-            }
+            var time = at >= 0 ? at : comp.time;
+            var old = gc_replaceTarget(comp, replace);
+            if (old) time = old.inPoint;
             var L = comp.layers.add(item);
             L.startTime = time;
-            if (old) { try { L.moveBefore(old); } catch (eB) {} old.remove(); }
+            if (old) { try { L.moveBefore(old); } catch (eB) {} gc_removeTextGroup(comp, old); }
             return gc_ok({ track: L.index - 1, seconds: time, duration: count / fps });
         });
     } catch (e) {
@@ -684,19 +681,399 @@ function gc_importSequence(first, count, fps, at, replace, name) {
     }
 }
 
+/* Tahrirlash uchun matn: avval tanlangan qatlam(lar), so'ng vaqt ko'rsatkichi ostidagisi */
+function gc_textInfo(comp, H) {
+    var info = { track: H.index - 1, start: H.inPoint, end: H.outPoint };
+    if (gc_isNativeHead(H)) { info.native = true; info.recipe = String(H.comment).substr(GC_NATIVE_TAG.length); }
+    else info.path = gc_layerPath(H);
+    return gc_ok(info);
+}
+
 function gc_textAtPlayhead() {
     try {
-        var comp = gc_comp();
-        for (var i = 1; i <= comp.numLayers; i++) {
+        var comp = gc_comp(), i, H;
+        var sel = comp.selectedLayers || [];
+        for (i = 0; i < sel.length; i++) { H = gc_textHead(sel[i]); if (H) return gc_textInfo(comp, H); }
+        for (i = 1; i <= comp.numLayers; i++) {
             var L = comp.layer(i);
-            var p = gc_layerPath(L);
-            if (p && gc_isTextPath(p) && L.inPoint <= comp.time + 1e-4 && L.outPoint > comp.time + 1e-4) {
-                return gc_ok({ track: i - 1, start: L.inPoint, end: L.outPoint, path: p });
-            }
+            if (!(L.inPoint <= comp.time + 1e-4 && L.outPoint > comp.time + 1e-4)) continue;
+            H = gc_textHead(L);
+            if (H) return gc_textInfo(comp, H);
         }
-        return gc_fail("Vaqt ko'rsatkichi ostida GeminiCut matni yo'q. Uni matn qatlami ustiga qo'ying.");
+        return gc_fail("GeminiCut matni topilmadi. Matn qatlamini tanlang yoki vaqt ko'rsatkichini uning ustiga qo'ying.");
     } catch (e) {
         return gc_fail(e.message || e.toString());
+    }
+}
+
+/* ======================= tahrirlanadigan (native) matn va 3D logolar =======================
+ * Panel shablonni AE'ning o'z qatlamlari bilan quradi: matn - oddiy Text qatlam (Character
+ * panelida shrift/rang/o'lcham, kompozitsiyada ikki marta bosib matnni o'zgartirish mumkin),
+ * fon - matnga bog'langan Shape qatlam (o'lchami ifoda orqali matnga moslashadi), animatsiya -
+ * oddiy keyframe'lar. 3D logo - Null (boshqaruv) + chuqurlik bo'yicha terilgan 3D nusxalar.
+ * Bosh qatlam izohida (Comment) panel retsepti saqlanadi - "Tahrirlash" uni qayta o'qiydi.
+ */
+
+var GC_NATIVE_TAG = "GeminiCut:";
+
+function gc_rgb(hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
+    if (!m) return [1, 1, 1];
+    var n = parseInt(m[1], 16);
+    return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+var GC_PS_FONTS = {
+    "Arial Black": ["Arial-Black", "Arial-Black"], "Impact": ["Impact", "Impact"],
+    "Segoe UI": ["SegoeUI", "SegoeUI-Bold"], "Segoe UI Black": ["SegoeUI-Black", "SegoeUI-Black"],
+    "Bahnschrift": ["Bahnschrift", "Bahnschrift-Bold"], "Arial": ["ArialMT", "Arial-BoldMT"],
+    "Montserrat": ["Montserrat-Regular", "Montserrat-Bold"], "Calibri": ["Calibri", "Calibri-Bold"],
+    "Trebuchet MS": ["TrebuchetMS", "TrebuchetMS-Bold"], "Verdana": ["Verdana", "Verdana-Bold"],
+    "Georgia": ["Georgia", "Georgia-Bold"], "Times New Roman": ["TimesNewRomanPSMT", "TimesNewRomanPS-BoldMT"],
+    "Cambria": ["Cambria", "Cambria-Bold"], "Franklin Gothic Medium": ["FranklinGothic-Medium", "FranklinGothic-Medium"],
+    "Century Gothic": ["CenturyGothic", "CenturyGothic-Bold"], "Comic Sans MS": ["ComicSansMS", "ComicSansMS-Bold"],
+    "Consolas": ["Consolas", "Consolas-Bold"], "Gabriola": ["Gabriola", "Gabriola"],
+    "Segoe Script": ["SegoeScript", "SegoeScript-Bold"], "Monotype Corsiva": ["MonotypeCorsiva", "MonotypeCorsiva"],
+    "Edwardian Script ITC": ["EdwardianScriptITC", "EdwardianScriptITC"], "Lucida Handwriting": ["LucidaHandwriting-Italic", "LucidaHandwriting-Italic"],
+    "Palatino Linotype": ["PalatinoLinotype-Roman", "PalatinoLinotype-Bold"], "Book Antiqua": ["BookAntiqua", "BookAntiqua-Bold"],
+    "Segoe UI Emoji": ["SegoeUIEmoji", "SegoeUIEmoji"]
+};
+
+/* Shrift oilasi -> PostScript nomi (AE 2024+ da app.fonts orqali aniq; aks holda jadval) */
+function gc_psFont(family, weight, italic) {
+    family = String(family || "Arial");
+    var bold = Number(weight) >= 600;
+    try {
+        if (app.fonts && app.fonts.getFontsByFamilyNameAndStyleName) {
+            var styles = bold ? (italic ? ["Bold Italic", "Black Italic", "Bold", "Black", "Regular"] : ["Bold", "Black", "Semibold", "Regular"])
+                : (italic ? ["Italic", "Regular"] : ["Regular", "Roman", "Book", "Medium"]);
+            for (var i = 0; i < styles.length; i++) {
+                var arr = app.fonts.getFontsByFamilyNameAndStyleName(family, styles[i]);
+                if (arr && arr.length && arr[0].postScriptName) return arr[0].postScriptName;
+            }
+        }
+    } catch (e) {}
+    var m = GC_PS_FONTS[family];
+    if (m) return m[bold ? 1 : 0];
+    return family.replace(/\s+/g, "");
+}
+
+function gc_effects(L) { return L.property("ADBE Effect Parade"); }
+
+/* Effekt qo'shadi va (havolalar eskirmasligi uchun) uni qayta topib qaytaradi */
+function gc_addEffect(L, matchName, name) {
+    var fx = gc_effects(L);
+    var e = fx.addProperty(matchName);
+    try { if (name) e.name = name; } catch (eN) {}
+    return fx.property(fx.numProperties);
+}
+
+function gc_setp(group, matchName, v) {
+    try { group.property(matchName).setValue(v); return true; } catch (e) { return false; }
+}
+
+function gc_keys(prop, list) {
+    for (var i = 0; i < list.length; i++) prop.setValueAtTime(list[i][0], list[i][1]);
+    try {
+        var dim = list[0][1] instanceof Array ? list[0][1].length : 1;
+        var ein = [], eout = [];
+        for (var d = 0; d < dim; d++) { ein.push(new KeyframeEase(0, 70)); eout.push(new KeyframeEase(0, 70)); }
+        for (var k = 1; k <= prop.numKeys; k++) prop.setTemporalEaseAtKey(k, ein, eout);
+    } catch (e) {}
+}
+
+function gc_parent(child, parent) {
+    try { if (child.setParentWithJump) { child.setParentWithJump(parent); return; } } catch (e) {}
+    child.parent = parent;
+}
+
+function gc_span(L, t0, D) {
+    L.startTime = t0;
+    L.inPoint = t0;
+    L.outPoint = t0 + D;
+}
+
+function gc_fontSizeOf(spec, comp) { return Math.max(4, Math.round(spec.size * comp.height)); }
+
+function gc_textLayer(comp, spec, txt, size, color) {
+    var L = comp.layers.addText(String(txt).replace(/\r?\n/g, "\r"));
+    var prop = L.property("ADBE Text Properties").property("ADBE Text Document");
+    var doc = prop.value;
+    try { doc.font = gc_psFont(spec.font, spec.weight, spec.italic); } catch (e1) {}
+    try { doc.fontSize = size; } catch (e2) {}
+    try { doc.applyFill = true; doc.fillColor = gc_rgb(color); } catch (e3) {}
+    try { doc.tracking = Math.round((spec.spacing || 0) * 1000); } catch (e4) {}
+    try { doc.autoLeading = false; doc.leading = Math.round(size * 1.14); } catch (e5) {}
+    try {
+        if (spec.sticker) { doc.applyStroke = true; doc.strokeColor = [1, 1, 1]; doc.strokeWidth = Math.max(2, Math.round(size * 0.22)); doc.strokeOverFill = false; }
+        else if (spec.stroke > 0) { doc.applyStroke = true; doc.strokeColor = [0.04, 0.04, 0.055]; doc.strokeWidth = Math.max(1, Math.round(size * 0.12 * spec.stroke)); doc.strokeOverFill = false; }
+        else doc.applyStroke = false;
+    } catch (e6) {}
+    try {
+        doc.justification = spec.align === "left" ? ParagraphJustification.LEFT_JUSTIFY
+            : spec.align === "right" ? ParagraphJustification.RIGHT_JUSTIFY : ParagraphJustification.CENTER_JUSTIFY;
+    } catch (e7) {}
+    prop.setValue(doc);
+    return L;
+}
+
+/* Ifodalar uchun umumiy boshlanish: ota matn qatlamining to'rtburchagi va shrift o'lchami */
+function gc_rectExpr(size) {
+    return "var p=thisLayer.parent,r=p.sourceRectAtTime(time,false),f=" + size + ";" +
+        "try{f=p.text.sourceText.style.fontSize;}catch(e){}";
+}
+
+function gc_bgLayer(comp, spec, T, size) {
+    var bg = spec.bg;
+    var S = comp.layers.addShape();
+    S.name = "GeminiCut fon";
+    var px = bg.padX, py = bg.padY;
+    var dims = "var w=r.width+2*" + px + "*f,h=r.height+2*" + py + "*f,cx=r.left+r.width/2,cy=r.top+r.height/2;";
+    var root = S.property("ADBE Root Vectors Group");
+    root.addProperty("ADBE Vector Group");
+    var vecs = function () { return S.property("ADBE Root Vectors Group").property(1).property("ADBE Vectors Group"); };
+    if (bg.shape === "slant") {
+        vecs().addProperty("ADBE Vector Shape - Group");
+        vecs().property("ADBE Vector Shape - Group").property("ADBE Vector Shape").expression =
+            gc_rectExpr(size) + dims + "var k=h*0.28;createPath([[cx-w/2+k,cy-h/2],[cx+w/2+k,cy-h/2],[cx+w/2-k,cy+h/2],[cx-w/2-k,cy+h/2]],[],[],true);";
+    } else {
+        vecs().addProperty("ADBE Vector Shape - Rect");
+        var rect = vecs().property("ADBE Vector Shape - Rect");
+        if (bg.shape === "bar") {
+            rect.property("ADBE Vector Rect Size").expression = gc_rectExpr(size) + dims + "[0.14*f,h];";
+            rect.property("ADBE Vector Rect Position").expression = gc_rectExpr(size) + dims + "[r.left-" + px + "*f,cy];";
+        } else {
+            rect.property("ADBE Vector Rect Size").expression = gc_rectExpr(size) + dims + "[w,h];";
+            rect.property("ADBE Vector Rect Position").expression = gc_rectExpr(size) + dims + "[cx,cy];";
+            vecs().property("ADBE Vector Shape - Rect").property("ADBE Vector Rect Roundness").expression =
+                gc_rectExpr(size) + dims + "Math.min(w,h)/2*" + (bg.radius || 0) + ";";
+        }
+    }
+    if (bg.fill) {
+        vecs().addProperty("ADBE Vector Graphic - Fill");
+        var fill = vecs().property("ADBE Vector Graphic - Fill");
+        gc_setp(fill, "ADBE Vector Fill Color", gc_rgb(bg.fill));
+        gc_setp(fill, "ADBE Vector Fill Opacity", bg.opacity || 100);
+    }
+    if (bg.stroke) {
+        vecs().addProperty("ADBE Vector Graphic - Stroke");
+        var st = vecs().property("ADBE Vector Graphic - Stroke");
+        gc_setp(st, "ADBE Vector Stroke Color", gc_rgb(bg.stroke));
+        gc_setp(st, "ADBE Vector Stroke Width", Math.max(2, Math.round(size * (bg.fill ? 0.035 : 0.07))));
+        if (bg.fill) gc_setp(st, "ADBE Vector Stroke Opacity", 60);
+    }
+    return S;
+}
+
+/* Bola qatlamni ota (matn) koordinatalariga joylaydi: ota bilan birga harakatlanadi/kattalashadi */
+function gc_attach(child, parent, below) {
+    gc_parent(child, parent);
+    var tg = child.property("ADBE Transform Group");
+    gc_setp(tg, "ADBE Anchor Point", [0, 0]);
+    gc_setp(tg, "ADBE Position", [0, 0]);
+    gc_setp(tg, "ADBE Scale", [100, 100]);
+    try { tg.property("ADBE Opacity").expression = "thisLayer.parent.transform.opacity"; } catch (e) {}
+    if (below) { try { child.moveAfter(parent); } catch (e2) {} }
+}
+
+function gc_shadow(L, spec, size) {
+    if (spec.shadow > 0) {
+        var ds = gc_addEffect(L, "ADBE Drop Shadow", "GeminiCut soya");
+        var op = Math.min(1, 0.35 + spec.shadow * 0.5);
+        if (!gc_setp(ds, "ADBE Drop Shadow-0002", op * 255)) gc_setp(ds, "ADBE Drop Shadow-0002", op * 100);
+        gc_setp(ds, "ADBE Drop Shadow-0004", Math.round(size * 0.05));
+        gc_setp(ds, "ADBE Drop Shadow-0005", Math.round(size * 0.18));
+    }
+    if (spec.glow > 0) {
+        var gl = gc_addEffect(L, "ADBE Drop Shadow", "GeminiCut nur");
+        gc_setp(gl, "ADBE Drop Shadow-0001", gc_rgb(spec.color2 || spec.accent));
+        if (!gc_setp(gl, "ADBE Drop Shadow-0002", 255)) gc_setp(gl, "ADBE Drop Shadow-0002", 100);
+        gc_setp(gl, "ADBE Drop Shadow-0004", 0);
+        gc_setp(gl, "ADBE Drop Shadow-0005", Math.round(size * (0.3 + spec.glow * 0.6)));
+    }
+}
+
+/* Kirish/chiqish animatsiyasi - matn qatlamining o'z keyframe'lari */
+function gc_animate(comp, T, spec, t0) {
+    var D = spec.duration, i = Math.max(0.1, spec.inDur), o = Math.max(0.1, spec.outDur), t1 = t0 + D;
+    var W = comp.width, H = comp.height, P = [spec.x * W, spec.y * H], size = gc_fontSizeOf(spec, comp);
+    var sp = Math.max(0.25, Math.min(4, spec.speed || 1));
+    var fdt = gc_fd(comp);
+    t1 -= fdt;
+    var tg = T.property("ADBE Transform Group");
+    var pos = tg.property("ADBE Position"), sc = tg.property("ADBE Scale"), op = tg.property("ADBE Opacity");
+    var a = spec.anim;
+    var fadeIn = a === "pop" || a === "counter" || a === "timer" || a === "pulse" ? i * 0.4 : a === "slam" || a === "strobe" ? i * 0.2 : i;
+    gc_keys(op, [[t0, 0], [t0 + fadeIn, 100], [t1 - o, 100], [t1, 0]]);
+    if (a === "pop" || a === "counter" || a === "timer" || a === "pulse") {
+        gc_keys(sc, [[t0, [0, 0]], [t0 + i * 0.7, [112, 112]], [t0 + i, [100, 100]], [t1 - o, [100, 100]], [t1, [80, 80]]]);
+    } else if (a === "slam" || a === "strobe") {
+        gc_keys(sc, [[t0, [260, 260]], [t0 + i * 0.5, [100, 100]], [t1 - o, [100, 100]], [t1, [120, 120]]]);
+        pos.expression = "var t=time-inPoint-" + (i * 0.5).toFixed(3) + ";(t>0&&t<0.4)?add(value,[Math.sin(t*95)*(0.4-t)*" + Math.round(size * 0.3) +
+            ",Math.cos(t*83)*(0.4-t)*" + Math.round(size * 0.25) + "]):value";
+    } else if (a === "rise") {
+        gc_keys(pos, [[t0, [P[0], P[1] + H * 0.06]], [t0 + i, P], [t1 - o, P], [t1, [P[0], P[1] - H * 0.03]]]);
+    } else if (a === "slide") {
+        var dx = spec.align === "right" ? W * 0.5 : -W * 0.5;
+        gc_keys(pos, [[t0, [P[0] + dx, P[1]]], [t0 + i, P], [t1 - o, P], [t1, [P[0] - dx * 0.4, P[1]]]]);
+    } else if (a === "blur") {
+        var bl = gc_addEffect(T, "ADBE Gaussian Blur 2", "GeminiCut xira");
+        try { gc_keys(bl.property("ADBE Gaussian Blur 2-0001"), [[t0, Math.round(size * 0.6)], [t0 + i, 0], [t1 - o, 0], [t1, Math.round(size * 0.4)]]); } catch (eB) {}
+        gc_keys(sc, [[t0, [125, 125]], [t0 + i, [100, 100]]]);
+    }
+    var st = tg.property("ADBE Scale");
+    if (a === "pulse") st.expression = "var t=time-inPoint;mul(value,1+0.08*Math.pow(Math.abs(Math.sin(t*Math.PI*" + (1.3 * sp).toFixed(3) + ")),12))";
+    if (a === "strobe") op.expression = "var t=time-inPoint;(t<" + (i * 1.6).toFixed(3) + "&&Math.floor(t*20)%2==1)?0:value";
+    var src = T.property("ADBE Text Properties").property("ADBE Text Document");
+    if (a === "typewriter") {
+        var len = String(spec.text || "").length;
+        var td = Math.min(D * 0.6, Math.max(i, 0.05 * len / sp));
+        src.expression = "var s=\"\"+value;s.substr(0,Math.floor(linear(time-inPoint,0," + td.toFixed(3) + ",0,s.length+1)))";
+    } else if (a === "counter") {
+        var cd = Math.max(i * 1.8, Math.min(2.2, D * 0.6));
+        src.expression = "var k=ease(time-inPoint,0," + cd.toFixed(3) + ",0,1);(\"\"+value).replace(/\\d+(?:[.,]\\d+)?/g,function(m){" +
+            "var dec=(m.split(/[.,]/)[1]||\"\").length,v=parseFloat(m.replace(\",\",\".\"))*k;return dec?v.toFixed(dec).replace(\".\",m.indexOf(\",\")>=0?\",\":\".\"):String(Math.round(v));})";
+    } else if (a === "timer") {
+        src.expression = "var s=(\"\"+value).split(\"\\r\")[0].replace(/^\\s+|\\s+$/g,\"\"),m=s.match(/^(\\d+):(\\d{1,2})$/)," +
+            "tot=m?Number(m[1])*60+Number(m[2]):Math.max(0,parseFloat(s)||30),c=Math.ceil(Math.max(0,tot-(time-inPoint)*" + sp + "))," +
+            "mm=Math.floor(c/60),ss=c%60;(m||tot>=60)?mm+\":\"+(ss<10?\"0\":\"\")+ss:String(c)";
+    }
+}
+
+function gc_nativeText(comp, spec, t0) {
+    var size = gc_fontSizeOf(spec, comp), made = [];
+    var T = gc_textLayer(comp, spec, spec.noText ? " " : spec.text, size, spec.color);
+    gc_span(T, t0, spec.duration);
+    made.push(T);
+    var tg = T.property("ADBE Transform Group");
+    /* tayanch nuqta - matn blokining vertikal markazi (gorizontal tekislash nuqtasi x=0) */
+    tg.property("ADBE Anchor Point").expression = "var r=sourceRectAtTime(Math.max(inPoint,outPoint-thisComp.frameDuration),false);[0,r.top+r.height/2]";
+    gc_setp(tg, "ADBE Position", [spec.x * comp.width, spec.y * comp.height]);
+    if (spec.sub) {
+        var sub = gc_textLayer(comp, { font: spec.font, weight: 500, italic: spec.italic, spacing: 0, align: spec.align, stroke: spec.stroke },
+            spec.sub, Math.round(size * 0.55), spec.color);
+        sub.name = "GeminiCut ost matn";
+        gc_span(sub, t0, spec.duration);
+        gc_attach(sub, T, true);
+        var stg = sub.property("ADBE Transform Group");
+        stg.property("ADBE Anchor Point").expression = "var r=sourceRectAtTime(time,false);[0,r.top]";
+        stg.property("ADBE Position").expression = gc_rectExpr(size) + "[0,r.top+r.height+0.3*f]";
+        made.push(sub);
+    }
+    if (spec.bg) {
+        var S = gc_bgLayer(comp, spec, T, size);
+        gc_span(S, t0, spec.duration);
+        gc_attach(S, T, false);
+        try { S.moveAfter(made[made.length - 1]); } catch (eM) {}
+        made.push(S);
+    }
+    gc_shadow(T, spec, size);
+    gc_animate(comp, T, spec, t0);
+    return { head: T, layers: made };
+}
+
+/* 3D logo: Null boshqaruvchi + chuqurlik bo'yicha terilgan nusxalar (orqadagilari qoraytirilgan) */
+function gc_nativeLogo(comp, spec, t0) {
+    var item = gc_importOnce(spec.logo, "GeminiCut Logo");
+    var W = comp.width, H = comp.height, D = spec.duration, made = [];
+    var ih = item.height || 1000, iw = item.width || 1000;
+    var hPx = 0.72 * spec.size * H;
+    if (hPx * iw / ih > 0.9 * W) hPx = 0.9 * W * ih / iw;
+    var sc = hPx / ih * 100;
+    var N = comp.layers.addNull(D);
+    N.name = "GeminiCut Logo: " + spec.name;
+    N.threeDLayer = true;
+    gc_span(N, t0, D);
+    var ntg = N.property("ADBE Transform Group");
+    gc_setp(ntg, "ADBE Anchor Point", [0, 0, 0]);
+    gc_setp(ntg, "ADBE Position", [spec.x * W, spec.y * H, 0]);
+    var sl = gc_addEffect(N, "ADBE Slider Control", "Qalinlik");
+    gc_setp(sl, "ADBE Slider Control-0001", Math.max(2, Math.round((spec.depth || 0.16) * hPx)));
+    made.push(N);
+    var K = 12, front = null;
+    for (var k = K - 1; k >= 0; k--) {
+        var L = comp.layers.add(item);
+        L.name = k ? "GeminiCut logo qalinlik " + k : "GeminiCut logo (old tomon)";
+        L.threeDLayer = true;
+        gc_span(L, t0, D);
+        gc_parent(L, N);
+        var tg = L.property("ADBE Transform Group");
+        gc_setp(tg, "ADBE Anchor Point", [iw / 2, ih / 2, 0]);
+        gc_setp(tg, "ADBE Position", [0, 0, 0]);
+        gc_setp(tg, "ADBE Scale", [sc, sc, sc]);
+        tg.property("ADBE Position").expression = "var d=thisLayer.parent.effect(\"Qalinlik\")(1);[value[0],value[1],d*" + (k / (K - 1)).toFixed(4) + "]";
+        tg.property("ADBE Opacity").expression = "thisLayer.parent.transform.opacity";
+        if (k > 0) {
+            var bc = gc_addEffect(L, "ADBE Brightness & Contrast 2", "GeminiCut yon");
+            gc_setp(bc, "ADBE Brightness & Contrast 2-0001", -70);
+        } else front = L;
+        made.push(L);
+    }
+    try {
+        var sw = gc_addEffect(front, "CC Light Sweep", "GeminiCut yaltirash");
+        gc_keys(sw.property(1), [[t0 + spec.inDur, [-iw * 0.3, ih / 2]], [t0 + Math.min(D - spec.outDur, spec.inDur + 1.4), [iw * 1.3, ih / 2]]]);
+    } catch (eS) {}
+    var rot = spec.rot || 32, i = Math.max(0.1, spec.inDur), o = Math.max(0.1, spec.outDur), t1 = t0 + D - gc_fd(comp);
+    var ry = ntg.property("ADBE Rotate Y");
+    gc_keys(ry, [[t0, rot * 1.8], [t0 + i, 0], [t1 - o, 0], [t1, rot * 1.2]]);
+    ry.expression = "value+Math.sin((time-inPoint)*1.1)*" + (rot * 0.3).toFixed(2);
+    try { ntg.property("ADBE Rotate X").expression = "value+Math.sin((time-inPoint)*0.8+1)*" + (rot * 0.1).toFixed(2); } catch (eX) {}
+    gc_keys(ntg.property("ADBE Scale"), [[t0, [55, 55, 55]], [t0 + i, [100, 100, 100]], [t1 - o, [100, 100, 100]], [t1, [115, 115, 115]]]);
+    gc_keys(ntg.property("ADBE Opacity"), [[t0, 0], [t0 + i * 0.25, 100], [t1 - o, 100], [t1, 0]]);
+    try { N.moveBefore(front); } catch (eN) {}
+    return { head: N, layers: made };
+}
+
+function gc_isNativeHead(L) {
+    try { return String(L.comment || "").indexOf(GC_NATIVE_TAG) === 0; } catch (e) { return false; }
+}
+
+/* Qatlamning GeminiCut matn guruhi boshini topadi (o'zi, yoki ota-qatlamlari orasidan) */
+function gc_textHead(L) {
+    var cur = L, guard = 0;
+    while (cur && guard++ < 8) {
+        if (gc_isNativeHead(cur)) return cur;
+        if (gc_isTextPath(gc_layerPath(cur))) return cur;
+        try { cur = cur.parent; } catch (e) { cur = null; }
+    }
+    return null;
+}
+
+/* Bosh qatlam va unga bog'langan barcha qatlamlarni o'chiradi */
+function gc_removeTextGroup(comp, head) {
+    var kids = [];
+    for (var i = 1; i <= comp.numLayers; i++) {
+        var L = comp.layer(i), p = null;
+        try { p = L.parent; } catch (e) {}
+        var guard = 0;
+        while (p && guard++ < 8) { if (p === head) { kids.push(L); break; } try { p = p.parent; } catch (e2) { p = null; } }
+    }
+    for (var k = 0; k < kids.length; k++) kids[k].remove();
+    head.remove();
+}
+
+function gc_replaceTarget(comp, replace) {
+    if (!replace || !(replace.track >= 0) || replace.track >= comp.numLayers) return null;
+    var L = gc_layerByStart(comp, replace.track, replace.start) || comp.layer(replace.track + 1);
+    return L ? gc_textHead(L) : null;
+}
+
+/* spec - panelning GCTextFX.nativeSpec() natijasi; spec.recipe - qayta tahrirlash uchun */
+function gc_insertNative(spec, at, replace) {
+    try {
+        var comp = gc_comp();
+        if (spec.logo && !new File(spec.logo).exists) return gc_fail("Logo fayli topilmadi: " + spec.logo);
+        return gc_undo("GeminiCut: matn", function () {
+            var t0 = at >= 0 ? at : comp.time;
+            var old = gc_replaceTarget(comp, replace);
+            if (old) { t0 = old.inPoint; gc_removeTextGroup(comp, old); }
+            var r = spec.logo ? gc_nativeLogo(comp, spec, t0) : gc_nativeText(comp, spec, t0);
+            try { r.head.comment = GC_NATIVE_TAG + gc_json(spec.recipe || {}); } catch (eC) {}
+            try { for (var i = 1; i <= comp.numLayers; i++) comp.layer(i).selected = false; r.head.selected = true; } catch (eS) {}
+            return gc_ok({ track: r.head.index - 1, seconds: t0, duration: spec.duration, native: true, layers: r.layers.length });
+        });
+    } catch (e) {
+        return gc_fail("Matn: " + (e.message || e.toString()));
     }
 }
 

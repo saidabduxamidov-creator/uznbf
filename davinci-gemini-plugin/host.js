@@ -15,7 +15,7 @@
  */
 "use strict";
 
-const VERSION = "4.5.0";
+const VERSION = "4.6.0";
 const BIN = "GeminiCut";
 
 function pad(n) { return String(n).padStart(2, "0"); }
@@ -157,6 +157,227 @@ function buildGradeResetLua() {
     "  for _, inp in pairs(t.Output:GetConnectedInputs() or {}) do inp:ConnectTo(src) end",
     "  t:Delete()",
     "end",
+    "c:Unlock()",
+  ].join("\n");
+}
+
+/* ======================= tahrirlanadigan (native) matn va 3D logo: Fusion =======================
+ * PNG klip timeline'ga qo'yilgach, unga Fusion kompozitsiya qo'shiladi va ichida shablon Fusion'ning
+ * o'z vositalari bilan quriladi: Text+ (GCMatn), fon (GCPlashka + GCPlashkaShakl), harakat (GCHarakat),
+ * ko'rinish (GCKorinish.Blend). 3D logo: Loader -> ImagePlane3D qatlamlari -> Merge3D -> Renderer3D.
+ * Fusion sahifasida har bir vosita Inspector'da tahrirlanadi (matn, shrift, rang, o'lcham, keyframe'lar).
+ * MediaIn1 (PNG kadrlar) zaxira sifatida kompozitsiyada qoladi.
+ */
+const NATIVE_TOOLS = ["GCMatn", "GCOstMatn", "GCPlashka", "GCPlashkaShakl", "GCBirlash", "GCBirlash2", "GCHarakat", "GCXira", "GCBosh", "GCKorinish",
+  "GCLogoRasm", "GCLogoYon", "GCLogo3D", "GCLogoRender"];
+
+function hexRgb(h) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(h || ""));
+  const n = m ? parseInt(m[1], 16) : 0xffffff;
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+function luaPrelude(fps, statusPath) {
+  return [
+    "local c = comp",
+    'local mi = c:FindTool("MediaIn1")',
+    'local mo = c:FindTool("MediaOut1")',
+    "local S = c:GetAttrs().COMPN_RenderStart or 0",
+    "local warn = {}",
+    "local function opt(what, f) local ok, e = pcall(f) if not ok then table.insert(warn, what .. ': ' .. tostring(e)) end return ok end",
+    "local function set(t, k, v) return opt(k, function() t:SetInput(k, v) end) end",
+    "local function anim(t, k, keys, xy)",
+    "  return opt(k, function()",
+    "    t[k] = xy and c:XYPath({}) or c:BezierSpline({})",
+    "    for _, kv in ipairs(keys) do t[k][S + kv[1]] = kv[2] end",
+    "  end)",
+    "end",
+    "local function add(kind, name)",
+    "  local t = c:AddTool(kind, -32768, -32768)",
+    "  if not t then error(kind .. ' vositasi qo\\'shilmadi') end",
+    "  t:SetAttrs({ TOOLS_Name = name })",
+    "  return t",
+    "end",
+    `local function finish(ok, err) pcall(function() local f = io.open(${luaStr(statusPath)}, "w") if f then f:write(ok and ("ok\\n" .. table.concat(warn, "\\n")) or ("xato: " .. tostring(err))) f:close() end end) end`,
+    "if not mi or not mo then finish(false, 'MediaIn1/MediaOut1 topilmadi') return end",
+    "c:Lock()",
+    `for _, n in ipairs({ ${NATIVE_TOOLS.map(luaStr).join(", ")} }) do local t = c:FindTool(n) if t then t:Delete() end end`,
+    "for k = 0, 40 do local t = c:FindTool('GCLogoQatlam' .. k) if t then t:Delete() end end",
+  ];
+}
+
+function luaEnd(L) {
+  return L.concat(["end)", "c:Unlock()", "finish(ok, err)"]).join("\n");
+}
+
+const lk = (keys) => "{ " + keys.map(([f, v]) => `{ ${Math.round(f)}, ${Array.isArray(v) ? "{ " + v.map(luaNum).join(", ") + " }" : luaNum(v)} }`).join(", ") + " }";
+
+/* Kirish/chiqish kalitlari (kadrlarda, klip boshidan) */
+function nativeTiming(spec, fps) {
+  const n = Math.max(2, Math.round(spec.duration * fps));
+  const i = Math.max(2, Math.round(Math.max(0.1, spec.inDur) * fps)), o = Math.max(2, Math.round(Math.max(0.1, spec.outDur) * fps));
+  return { n, i, o, last: n - 1 };
+}
+
+function buildNativeTextLua(spec, W, H, fps, statusPath) {
+  const T = nativeTiming(spec, fps), a = spec.anim;
+  const px = spec.x, py = 1 - spec.y; // Fusion: y yuqoriga
+  const size = spec.size, fpx = size * H;
+  const lines = String(spec.text || " ").split(/\r?\n/);
+  const box = spec.box || [Math.max(...lines.map((l) => l.length)) * fpx * 0.62, lines.length * fpx * 1.14];
+  const col = hexRgb(spec.color);
+  const L = luaPrelude(fps, statusPath);
+  L.push("local ok, err = pcall(function()");
+  L.push(`  local W, H = ${Math.round(W)}, ${Math.round(H)}`);
+  L.push('  local function canvas(name) local b = add("Background", name) set(b, "Width", W) set(b, "Height", H) set(b, "TopLeftAlpha", 0) return b end');
+  L.push('  local function text(name, str, sz, r, g, b, cx, cy)');
+  L.push('    local t = add("TextPlus", name)');
+  L.push('    set(t, "Width", W) set(t, "Height", H)');
+  L.push('    t.StyledText = str');
+  L.push(`    set(t, "Font", ${luaStr(spec.font || "Arial")})`);
+  L.push(`    set(t, "Style", ${luaStr(Number(spec.weight) >= 600 ? (spec.italic ? "Bold Italic" : "Bold") : spec.italic ? "Italic" : "Regular")})`);
+  L.push('    t.Size = sz');
+  L.push('    set(t, "Red1", r) set(t, "Green1", g) set(t, "Blue1", b)');
+  L.push(`    set(t, "CharacterSpacing", ${luaNum(1 + (spec.spacing || 0))})`);
+  const hj = spec.align === "left" ? 0 : spec.align === "right" ? 2 : 1;
+  L.push(`    set(t, "HorizontalJustificationNew", ${hj})`);
+  L.push(`    set(t, "HorizontalLeftCenterRight", ${hj - 1})`);
+  L.push('    t.Center = { cx, cy }');
+  if (spec.sticker) L.push('    set(t, "Enabled2", 1) set(t, "Red2", 1) set(t, "Green2", 1) set(t, "Blue2", 1) set(t, "Thickness2", 0.12)');
+  else if (spec.stroke > 0) L.push(`    set(t, "Enabled2", 1) set(t, "Red2", 0.04) set(t, "Green2", 0.04) set(t, "Blue2", 0.055) set(t, "Thickness2", ${luaNum(0.04 * spec.stroke)})`);
+  if (spec.shadow > 0) L.push(`    set(t, "Enabled3", 1) set(t, "Softness3", ${luaNum(0.6 + spec.shadow)})`);
+  L.push('    return t');
+  L.push('  end');
+  L.push(`  local cur = text("GCMatn", ${luaStr(spec.noText ? " " : lines.join("\n"))}, ${luaNum(size)}, ${col.map(luaNum).join(", ")}, ${luaNum(px)}, ${luaNum(py)})`);
+  if (spec.bg) {
+    const bg = spec.bg, pad = [bg.padX * fpx, bg.padY * fpx];
+    const bw = bg.shape === "bar" ? fpx * 0.14 : box[0] + 2 * pad[0], bh = box[1] + 2 * pad[1];
+    let bx = px; // markaz
+    if (spec.align === "left") bx = px + box[0] / 2 / W;
+    if (spec.align === "right") bx = px - box[0] / 2 / W;
+    if (bg.shape === "bar") bx = (spec.align === "left" ? px : bx - box[0] / 2 / W) - pad[0] / W;
+    const fc = hexRgb(bg.fill || bg.stroke), op = (bg.opacity || 100) / 100;
+    L.push('  local pl = add("Background", "GCPlashka")');
+    L.push('  set(pl, "Width", W) set(pl, "Height", H)');
+    L.push(`  set(pl, "TopLeftRed", ${luaNum(fc[0] * op)}) set(pl, "TopLeftGreen", ${luaNum(fc[1] * op)}) set(pl, "TopLeftBlue", ${luaNum(fc[2] * op)}) set(pl, "TopLeftAlpha", ${luaNum(op)})`);
+    L.push('  local sh = add("RectangleMask", "GCPlashkaShakl")');
+    L.push(`  sh.Center = { ${luaNum(bx)}, ${luaNum(py)} }`);
+    L.push(`  set(sh, "Width", ${luaNum(bw / W)}) set(sh, "Height", ${luaNum(bh / W)})`);
+    L.push(`  set(sh, "CornerRadius", ${luaNum(Math.min(1, bg.radius || 0))})`);
+    if (!bg.fill && bg.stroke) L.push(`  set(sh, "Solid", 0) set(sh, "BorderWidth", ${luaNum((fpx * 0.07) / W)})`);
+    L.push('  pl.EffectMask = sh.Mask or sh.Output');
+    L.push('  local mg = add("Merge", "GCBirlash")');
+    L.push('  mg.Background = pl.Output');
+    L.push('  mg.Foreground = cur.Output');
+    L.push('  cur = mg');
+  }
+  if (spec.sub) {
+    const dy = (lines.length * 1.14 * fpx) / 2 + 0.55 * fpx;
+    L.push(`  local st = text("GCOstMatn", ${luaStr(spec.sub)}, ${luaNum(size * 0.55)}, ${col.map(luaNum).join(", ")}, ${luaNum(px)}, ${luaNum(py - dy / H)})`);
+    L.push('  local m2 = add("Merge", "GCBirlash2")');
+    L.push('  m2.Background = cur.Output');
+    L.push('  m2.Foreground = st.Output');
+    L.push('  cur = m2');
+  }
+  // harakat: Transform (o'lcham, joy)
+  L.push('  local tr = add("Transform", "GCHarakat")');
+  L.push('  tr.Input = cur.Output');
+  L.push(`  set(tr, "Pivot", { ${luaNum(px)}, ${luaNum(py)} })`);
+  L.push(`  tr.Center = { ${luaNum(px)}, ${luaNum(py)} }`);
+  const { i, o, last } = T;
+  const P = [px, py];
+  if (a === "pop" || a === "counter" || a === "timer" || a === "typewriter" || a === "pulse") {
+    const k = [[0, 0], [i * 0.7, 1.12], [i, 1]];
+    if (a === "pulse") { const beat = Math.max(4, Math.round(fps / (1.3 * (spec.speed || 1)))); for (let f = i + beat; f < last - o; f += beat) k.push([f - 2, 1], [f, 1.08], [f + 2, 1]); }
+    k.push([last - o, 1], [last, 0.8]);
+    L.push(`  anim(tr, "Size", ${lk(k)})`);
+  } else if (a === "slam" || a === "strobe") {
+    L.push(`  anim(tr, "Size", ${lk([[0, 2.6], [i * 0.5, 1], [last - o, 1], [last, 1.2]])})`);
+    const sh = [], amp = (fpx * 0.12) / W;
+    for (let f = Math.round(i * 0.5); f < Math.round(i * 0.5) + 10; f++) sh.push([f, [P[0] + Math.sin(f * 2.1) * amp * (1 - (f - i * 0.5) / 10), P[1] + Math.cos(f * 1.7) * amp * 0.8 * (1 - (f - i * 0.5) / 10)]]);
+    sh.push([Math.round(i * 0.5) + 10, P]);
+    L.push(`  anim(tr, "Center", ${lk(sh)}, true)`);
+  } else if (a === "rise") {
+    L.push(`  anim(tr, "Center", ${lk([[0, [P[0], P[1] - 0.06]], [i, P], [last - o, P], [last, [P[0], P[1] + 0.03]]])}, true)`);
+  } else if (a === "slide") {
+    const dx = spec.align === "right" ? 0.5 : -0.5;
+    L.push(`  anim(tr, "Center", ${lk([[0, [P[0] + dx, P[1]]], [i, P], [last - o, P], [last, [P[0] - dx * 0.4, P[1]]]])}, true)`);
+  }
+  if (a === "blur") {
+    L.push('  local bl = add("Blur", "GCXira")');
+    L.push('  bl.Input = tr.Output');
+    L.push(`  anim(bl, "XBlurSize", ${lk([[0, 30], [i, 0], [last - o, 0], [last, 20]])})`);
+    L.push('  cur = bl');
+  } else L.push('  cur = tr');
+  // ko'rinish (shaffoflik): Merge.Blend
+  L.push('  local bo = canvas("GCBosh")');
+  L.push('  local kv = add("Merge", "GCKorinish")');
+  L.push('  kv.Background = bo.Output');
+  L.push('  kv.Foreground = cur.Output');
+  const fadeIn = a === "pop" || a === "counter" || a === "timer" || a === "pulse" ? i * 0.4 : a === "slam" || a === "strobe" ? i * 0.2 : i;
+  const blend = [[0, 0], [Math.max(1, fadeIn), 1]];
+  if (a === "strobe") for (let f = Math.max(2, Math.round(fadeIn)) + 1; f < Math.min(last - o, i * 1.6); f += 2) blend.push([f, 0], [f + 1, 1]);
+  blend.push([last - o, 1], [last, 0]);
+  L.push(`  anim(kv, "Blend", ${lk(blend)})`);
+  L.push("  mo.Input = kv.Output");
+  return luaEnd(L);
+}
+
+function buildNativeLogoLua(spec, W, H, fps, statusPath, img) {
+  const T = nativeTiming(spec, fps);
+  const iw = (img && img.width) || 1000, ih = (img && img.height) || 1000;
+  let hPx = 0.72 * spec.size * H;
+  if (hPx * iw / ih > 0.9 * W) hPx = 0.9 * W * ih / iw;
+  const wPx = hPx * iw / ih, K = 12, rot = spec.rot || 32;
+  const dz = ((spec.depth || 0.16) * hPx) / W / (K - 1);
+  const L = luaPrelude(fps, statusPath);
+  L.push("local ok, err = pcall(function()");
+  L.push('  local ld = add("Loader", "GCLogoRasm")');
+  L.push(`  ld.Clip = ${luaStr(spec.logo)}`);
+  L.push('  local dk = add("BrightnessContrast", "GCLogoYon")');
+  L.push('  dk.Input = ld.Output');
+  L.push('  set(dk, "Gain", 0.32)');
+  L.push('  local m3 = add("Merge3D", "GCLogo3D")');
+  L.push(`  for k = 0, ${K - 1} do`);
+  L.push('    local p = add("ImagePlane3D", "GCLogoQatlam" .. k)');
+  L.push('    p.MaterialInput = (k == 0) and ld.Output or dk.Output');
+  L.push(`    p:SetInput("Transform3DOp.Translate.Z", -k * ${luaNum(dz)})`);
+  L.push('    m3["SceneInput" .. (k + 1)] = p.Output');
+  L.push("  end");
+  L.push(`  set(m3, "Transform3DOp.Scale.X", ${luaNum(wPx / W)})`);
+  L.push(`  set(m3, "Transform3DOp.Translate.X", ${luaNum(spec.x - 0.5)})`);
+  L.push(`  set(m3, "Transform3DOp.Translate.Y", ${luaNum(((0.5 - spec.y) * H) / W)})`);
+  const { i, o, last } = T;
+  const ry = [[0, rot * 1.8], [i, 0]];
+  for (let f = i + Math.round(fps * 0.5); f < last - o; f += Math.round(fps * 0.5)) ry.push([f, Math.sin((f - i) / fps * 1.1) * rot * 0.3]);
+  ry.push([last - o, 0], [last, rot * 1.2]);
+  L.push(`  anim(m3, "Transform3DOp.Rotate.Y", ${lk(ry)})`);
+  L.push('  local r = add("Renderer3D", "GCLogoRender")');
+  L.push('  r.SceneInput = m3.Output');
+  L.push(`  set(r, "Width", ${Math.round(W)}) set(r, "Height", ${Math.round(H)})`);
+  L.push('  local bo = add("Background", "GCBosh")');
+  L.push(`  set(bo, "Width", ${Math.round(W)}) set(bo, "Height", ${Math.round(H)}) set(bo, "TopLeftAlpha", 0)`);
+  L.push('  local tr = add("Transform", "GCHarakat")');
+  L.push('  tr.Input = r.Output');
+  L.push(`  anim(tr, "Size", ${lk([[0, 0.55], [i, 1], [last - o, 1], [last, 1.15]])})`);
+  L.push('  local kv = add("Merge", "GCKorinish")');
+  L.push('  kv.Background = bo.Output');
+  L.push('  kv.Foreground = tr.Output');
+  L.push(`  anim(kv, "Blend", ${lk([[0, 0], [Math.max(1, i * 0.25), 1], [last - o, 1], [last, 0]])})`);
+  L.push("  mo.Input = kv.Output");
+  return luaEnd(L);
+}
+
+/* Native qurilmasa: GeminiCut vositalarini o'chirib, PNG kadrlarni (MediaIn1) qayta ulaydi */
+function buildNativeRestoreLua() {
+  return [
+    "local c = comp",
+    "c:Lock()",
+    `for _, n in ipairs({ ${NATIVE_TOOLS.map(luaStr).join(", ")} }) do local t = c:FindTool(n) if t then t:Delete() end end`,
+    "for k = 0, 40 do local t = c:FindTool('GCLogoQatlam' .. k) if t then t:Delete() end end",
+    'local mi = c:FindTool("MediaIn1")',
+    'local mo = c:FindTool("MediaOut1")',
+    "if mi and mo then mo.Input = mi.Output end",
     "c:Unlock()",
   ].join("\n");
 }
@@ -371,6 +592,36 @@ function createHost(resolve, deps) {
     const n2 = await e.tl.GetTrackCount("video");
     if (n2 <= nv) throw new Error("Yangi video trek yaratilmadi.");
     return n2;
+  }
+
+  /* PNG ketma-ketligini Media Pool'ga olib, timeline'ga qo'yadi (almashtirishda eskisining o'rniga) */
+  async function placeSequence(e, first, count, at, replace, name) {
+    const m = /^(.*?)(\d+)(\.png)$/i.exec(String(first));
+    if (!m || !fs.existsSync(first)) throw new Error("Kadrlar topilmadi: " + first);
+    const folder = await bin(e, "Matn");
+    await e.mp.SetCurrentFolder(folder);
+    const startIdx = Number(m[2]);
+    const list = await e.mp.ImportMedia([{ FilePath: m[1] + "%0" + m[2].length + "d" + m[3], StartIndex: startIdx, EndIndex: startIdx + count - 1 }]);
+    if (!list || !list.length) throw new Error("PNG ketma-ketligi import qilinmadi.");
+    const mpi = list[0];
+    try { if (name && typeof mpi.SetClipProperty === "function") await mpi.SetClipProperty("Clip Name", name); } catch (err) { /* ixtiyoriy */ }
+    let frames = await clipFrames(e, mpi);
+    if (!(frames > 1)) frames = count;
+    let rec = at >= 0 ? frameAt(e, at) : await playheadFrame(e);
+    let idx;
+    if (replace && replace.track >= 0) {
+      idx = replace.track + 1;
+      const old = await itemAt(e, "video", idx, frameAt(e, replace.start) + 1);
+      if (old) {
+        rec = await old.GetStart();
+        if (typeof e.tl.DeleteClips !== "function" || !(await e.tl.DeleteClips([old], false))) throw new Error("Eski matnni o'chirib bo'lmadi. Uni qo'lda o'chiring.");
+      }
+    } else {
+      idx = await overlayTrack(e, rec, rec + frames);
+    }
+    const placed = await e.mp.AppendToTimeline([{ mediaPoolItem: mpi, startFrame: 0, endFrame: frames - 1, trackIndex: idx, recordFrame: rec, mediaType: 1 }]);
+    if (!placed || !placed.length) throw new Error("Matn timeline'ga qo'yilmadi. U Media Pool'da (GeminiCut → Matn).");
+    return { item: placed[0], idx, rec, frames };
   }
 
   const api = {
@@ -850,32 +1101,39 @@ function createHost(resolve, deps) {
      */
     async gc_importSequence(first, count, fps, at, replace, name) {
       const e = await env();
-      const m = /^(.*?)(\d+)(\.png)$/i.exec(String(first));
-      if (!m || !fs.existsSync(first)) throw new Error("Kadrlar topilmadi: " + first);
-      const folder = await bin(e, "Matn");
-      await e.mp.SetCurrentFolder(folder);
-      const startIdx = Number(m[2]);
-      const list = await e.mp.ImportMedia([{ FilePath: m[1] + "%0" + m[2].length + "d" + m[3], StartIndex: startIdx, EndIndex: startIdx + count - 1 }]);
-      if (!list || !list.length) throw new Error("PNG ketma-ketligi import qilinmadi.");
-      const mpi = list[0];
-      try { if (name && typeof mpi.SetClipProperty === "function") await mpi.SetClipProperty("Clip Name", name); } catch (err) { /* ixtiyoriy */ }
-      let frames = await clipFrames(e, mpi);
-      if (!(frames > 1)) frames = count;
-      let rec = at >= 0 ? frameAt(e, at) : await playheadFrame(e);
-      let idx;
-      if (replace && replace.track >= 0) {
-        idx = replace.track + 1;
-        const old = await itemAt(e, "video", idx, frameAt(e, replace.start) + 1);
-        if (old) {
-          rec = await old.GetStart();
-          if (typeof e.tl.DeleteClips !== "function" || !(await e.tl.DeleteClips([old], false))) throw new Error("Eski matnni o'chirib bo'lmadi. Uni qo'lda o'chiring.");
+      const p = await placeSequence(e, first, count, at, replace, name);
+      return { track: p.idx - 1, seconds: sec(e, p.rec), duration: p.frames / e.fps };
+    },
+
+    /*
+     * Tahrirlanadigan matn/logo: PNG kadrlar zaxira sifatida qo'yiladi, so'ng klipga Fusion kompozitsiya
+     * qo'shilib, ichida Text+ / 3D sahna quriladi. Qurilmasa - PNG klip o'zi qoladi (mode: "png").
+     */
+    async gc_insertNative(spec, first, count, fps, at, replace, name) {
+      const e = await env();
+      const p = await placeSequence(e, first, count, at, replace, name);
+      const base = { track: p.idx - 1, seconds: sec(e, p.rec), duration: p.frames / e.fps };
+      if (!p.item) return Object.assign(base, { mode: "png", reason: "Qo'yilgan klip topilmadi" });
+      const statusFile = path.join(path.dirname(first), "native-status.txt");
+      try { fs.unlinkSync(statusFile); } catch (err) { /* yo'q */ }
+      let reason = "";
+      try {
+        const W = Number(spec.W) || Number(await e.tl.GetSetting("timelineResolutionWidth")) || 1920;
+        const H = Number(spec.H) || Number(await e.tl.GetSetting("timelineResolutionHeight")) || 1080;
+        const comp = await fusionComp(p.item);
+        await comp.Execute(spec.logo ? buildNativeLogoLua(spec, W, H, e.fps, statusFile, spec.img) : buildNativeTextLua(spec, W, H, e.fps, statusFile));
+        let txt = "";
+        for (let k = 0; k < 20 && !txt; k++) {
+          if (fs.existsSync(statusFile)) txt = String(fs.readFileSync(statusFile, "utf8"));
+          else await sleep(100);
         }
-      } else {
-        idx = await overlayTrack(e, rec, rec + frames);
+        if (/^ok/.test(txt)) return Object.assign(base, { mode: "native", warnings: txt.split(/\r?\n/).slice(1).filter(Boolean) });
+        reason = txt ? txt.replace(/^xato:\s*/, "") : "Fusion javob bermadi";
+        await comp.Execute(buildNativeRestoreLua());
+      } catch (err) {
+        reason = (err && err.message) || String(err);
       }
-      const placed = await e.mp.AppendToTimeline([{ mediaPoolItem: mpi, startFrame: 0, endFrame: frames - 1, trackIndex: idx, recordFrame: rec, mediaType: 1 }]);
-      if (!placed || !placed.length) throw new Error("Matn timeline'ga qo'yilmadi. U Media Pool'da (GeminiCut → Matn).");
-      return { track: idx - 1, seconds: sec(e, rec), duration: frames / e.fps };
+      return Object.assign(base, { mode: "png", reason });
     },
 
     /* Playhead ostidagi GeminiCut matni (tahrirlash uchun) */
@@ -904,4 +1162,4 @@ function createHost(resolve, deps) {
   return wrapped;
 }
 
-module.exports = { createHost, buildMotionLua, buildResetLua, buildGradeLua, buildGradeResetLua, tcToFrames, framesToTc, VERSION };
+module.exports = { createHost, buildMotionLua, buildResetLua, buildGradeLua, buildGradeResetLua, buildNativeTextLua, buildNativeLogoLua, buildNativeRestoreLua, tcToFrames, framesToTc, VERSION };

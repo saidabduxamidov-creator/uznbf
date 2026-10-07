@@ -12,8 +12,9 @@
   const $ = (id) => document.getElementById(id);
   const T = () => window.GCTextFX;
   const LS = "geminicut.text.v1";
+  const LS_MODE = "geminicut.text.mode";
 
-  let R = null, kind = "2d", editing = null, busy = false, token = null;
+  let R = null, kind = "2d", editing = null, busy = false, token = null, mode = "native";
   let drawer = null, drawerKey = "", bgImage = null, playing = true, t0 = performance.now(), thumbsDone = {};
 
   const ROOT = () => { const d = path.join(os.homedir(), "Documents", "GeminiCut", "Matn"); fs.mkdirSync(d, { recursive: true }); return d; };
@@ -130,6 +131,7 @@
   function syncControls() {
     BIND.forEach(([id, key, prop]) => { const el = $(id); if (!el) return; if (prop === "checked") el.checked = !!R[key]; else el.value = R[key]; });
     document.querySelectorAll("#txWeight button").forEach((b) => b.classList.toggle("on", Number(b.dataset.v) === Number(R.weight) || (Number(b.dataset.v) === 700 && R.weight >= 600 && R.weight < 850) || (Number(b.dataset.v) === 900 && R.weight >= 850)));
+    updateModeHint();
     const tp = T().byId(R.template);
     $("txSubWrap").hidden = !tp.sub;
     // logo shablonlari: matn va rang kerak emas, faqat 3D sozlamalari
@@ -200,6 +202,50 @@
   function slug(s) { return String(s || "matn").toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 24) || "matn"; }
   function stamp() { const d = new Date(), p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
 
+  const hostApp = () => window.GCHost.app || (document.body.classList.contains("resolve") ? "resolve" : "ppro");
+  /* AE va Resolve: shablon muharrirning o'z qatlamlari / Fusion vositalari bilan quriladi */
+  const useNative = () => (hostApp() === "ae" || hostApp() === "resolve") && mode === "native" && T().nativeSupported(R, hostApp());
+
+  function pngSize(file) {
+    try {
+      const b = fs.readFileSync(file);
+      if (b.length > 24 && b.readUInt32BE(12) === 0x49484452) return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+    } catch (e) { /* o'qilmadi */ }
+    return null;
+  }
+
+  function nativeSpecFor(W, H) {
+    const spec = T().nativeSpec(R);
+    spec.W = W; spec.H = H; spec.recipe = Object.assign({}, R);
+    if (spec.logo) {
+      spec.logo = T().assetPath(spec.logo);
+      spec.img = pngSize(spec.logo);
+    } else {
+      const m = T().nativeMeasure(R, W, H);
+      if (m) { spec.size = m.size; spec.box = m.box; }
+    }
+    return spec;
+  }
+
+  function updateModeHint() {
+    const el = $("txModeHint");
+    if (!el) return;
+    document.querySelectorAll("#txMode button").forEach((b) => b.classList.toggle("on", b.dataset.v === mode));
+    const app = hostApp(), logo = !!T().byId(R.template).logo;
+    let t = "";
+    if (mode === "png") t = "Kadrlar (PNG): natija oldindan ko'rishdagidek. Matnni o'zgartirish - panelda (klipni tanlab “Tahrirlash”).";
+    else if (!T().nativeSupported(R, app)) t = app === "resolve" && T().NATIVE[R.template]
+      ? "Bu animatsiya (sanagich/taymer/yozuv) Resolve'da kadrlar (PNG) bo'lib qo'yiladi."
+      : "3D suyuq matn faqat kadrlar (PNG) bo'lib qo'yiladi. Tahrirlanadigan 3D - logolar.";
+    else if (app === "ae") t = logo
+      ? "AE qatlamlari: Null + 3D nusxalar. Null'dagi “Qalinlik” slayderi - chuqurlik; aylanish, o'lcham, joy - Null'ning Transform'ida."
+      : "AE qatlamlari: matnni kompozitsiyada ikki marta bosib o'zgartiring; shrift/rang - Character paneli; fon matn o'lchamiga o'zi moslashadi; animatsiya - oddiy keyframe'lar.";
+    else t = logo
+      ? "Resolve Fusion: klipni tanlab Fusion sahifasini oching - GCLogo3D (aylanish/o'lcham), GCLogoQatlam (qalinlik), GCLogoRasm (rasm) Inspector'da."
+      : "Resolve Fusion: klipni tanlab Fusion sahifasini oching - GCMatn (Text+) Inspector'da matn, shrift, rang, o'lcham; GCPlashka - fon; GCHarakat - animatsiya.";
+    el.textContent = t;
+  }
+
   async function insert() {
     if (busy) return;
     const tpl = T().byId(R.template);
@@ -212,15 +258,31 @@
       let seq = window.GCApplication.sequence();
       if (!seq || !seq.width) seq = await window.GCHost.call("gc_getSequenceInfo", [], 20000);
       const W = seq.width || 1920, H = seq.height || 1080, fps = seq.fps || 25;
-      const dir = path.join(ROOT(), `${stamp()}_${R.template}_${slug(R.text)}`);
-      const n = Math.max(1, Math.round(R.duration * fps));
-      status(`Kadrlar chizilmoqda… 0/${n}`);
-      const out = await T().render(R, dir, { width: W, height: H, fps, token,
-        onProgress: (i, total) => { $("txBar").style.width = Math.round((i / total) * 100) + "%"; $("txProgLabel").textContent = `${i}/${total}`; status(`Kadrlar chizilmoqda… ${i}/${total}`); } });
-      status("Timeline'ga qo'yilmoqda…");
-      const name = tpl.logo ? `Logo 3D · ${tpl.custom ? require("path").basename(R.logo) : tpl.name}` : `Matn · ${tpl.name} · ${String(R.text).split(/\n/)[0].slice(0, 24)}`;
-      const r = await window.GCHost.call("gc_importSequence", [out.first, out.count, fps, -1, editing, name], 180000);
-      status(`✓ ${editing ? "Matn yangilandi" : "Matn qo'yildi"}: ${window.GCHost.app === "ae" ? "qatlam #" + (r.track + 1) : "V" + (r.track + 1)}, ${window.GCSubs.formatClock(r.seconds)} (${out.count} kadr).`);
+      const ae = hostApp() === "ae", native = useNative();
+      const where = (r) => `${ae ? "qatlam #" + (r.track + 1) : "V" + (r.track + 1)}, ${window.GCSubs.formatClock(r.seconds)}`;
+      const what = tpl.logo ? "Logo" : "Matn", done = editing ? what + " yangilandi" : what + " qo'yildi";
+      if (native && ae) { // AE: render kerak emas - qatlamlar to'g'ridan-to'g'ri
+        status("After Effects qatlamlari yaratilmoqda…");
+        const r = await window.GCHost.call("gc_insertNative", [nativeSpecFor(W, H), -1, editing], 120000);
+        status(`✓ ${done}: ${where(r)} - ${r.layers} ta qatlam. Endi uni After Effects'ning o'zida tahrirlash mumkin.`);
+      } else {
+        const dir = path.join(ROOT(), `${stamp()}_${R.template}_${slug(R.text)}`);
+        const n = Math.max(1, Math.round(R.duration * fps));
+        status(`Kadrlar chizilmoqda… 0/${n}`);
+        const out = await T().render(R, dir, { width: W, height: H, fps, token,
+          onProgress: (i, total) => { $("txBar").style.width = Math.round((i / total) * 100) + "%"; $("txProgLabel").textContent = `${i}/${total}`; status(`Kadrlar chizilmoqda… ${i}/${total}`); } });
+        status("Timeline'ga qo'yilmoqda…");
+        const name = tpl.logo ? `Logo 3D · ${tpl.custom ? require("path").basename(R.logo) : tpl.name}` : `Matn · ${tpl.name} · ${String(R.text).split(/\n/)[0].slice(0, 24)}`;
+        if (native) { // Resolve: PNG zaxira klipi + Fusion (Text+ / 3D)
+          const r = await window.GCHost.call("gc_insertNative", [nativeSpecFor(W, H), out.first, out.count, fps, -1, editing, name], 180000);
+          status(r.mode === "native"
+            ? `✓ ${done}: ${where(r)}. Fusion sahifasida tahrirlanadi (${tpl.logo ? "GCLogo3D" : "GCMatn"}).`
+            : `✓ ${done} (kadrlar): ${where(r)}. Fusion qurilmadi: ${r.reason}`, r.mode !== "native");
+        } else {
+          const r = await window.GCHost.call("gc_importSequence", [out.first, out.count, fps, -1, editing, name], 180000);
+          status(`✓ ${done}: ${where(r)} (${out.count} kadr).`);
+        }
+      }
       stopEditing();
       window.GCApplication.timelineChanged();
     } catch (e) {
@@ -233,9 +295,13 @@
   async function editAtPlayhead() {
     try {
       const r = await window.GCHost.call("gc_textAtPlayhead", [], 20000);
-      const file = path.join(path.dirname(r.path), "recipe.json");
-      if (!fs.existsSync(file)) throw new Error("Bu matnning sozlamalari (recipe.json) topilmadi.");
-      const rec = JSON.parse(fs.readFileSync(file, "utf8"));
+      let rec;
+      if (r.native && r.recipe) rec = JSON.parse(r.recipe); // AE qatlamlari: retsept bosh qatlam izohida
+      else {
+        const file = path.join(path.dirname(r.path), "recipe.json");
+        if (!fs.existsSync(file)) throw new Error("Bu matnning sozlamalari (recipe.json) topilmadi.");
+        rec = JSON.parse(fs.readFileSync(file, "utf8"));
+      }
       ["width", "height", "fps", "frames"].forEach((k) => delete rec[k]);
       R = Object.assign({}, T().DEFAULT, rec);
       save();
@@ -306,6 +372,12 @@
       save(); syncControls();
     }));
     document.querySelectorAll("#txKind button").forEach((b) => b.addEventListener("click", () => setKind(b.dataset.v)));
+    try { mode = localStorage.getItem(LS_MODE) === "png" ? "png" : "native"; } catch (e) { /* standart */ }
+    document.querySelectorAll("#txMode button").forEach((b) => b.addEventListener("click", () => {
+      mode = b.dataset.v;
+      try { localStorage.setItem(LS_MODE, mode); } catch (e) { /* e'tiborsiz */ }
+      updateModeHint();
+    }));
     $("txPlay").addEventListener("click", () => { playing = !playing; $("txPlay").textContent = playing ? "❚❚" : "▶"; if (playing) t0 = performance.now() - (Number($("txScrub").value) / 1000) * R.duration * 1000; });
     $("txScrub").addEventListener("input", () => { playing = false; $("txPlay").textContent = "▶"; });
     $("txBg").addEventListener("click", () => { if (bgImage) { bgImage = null; status("Fon o'chirildi."); } else grabBackground(); });

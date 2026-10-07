@@ -6,7 +6,7 @@ const path = require('path');
 let uid = 1;
 
 class Property {
-  constructor(layer, value) { this.layer = layer; this.v = value; this.keys = []; this.dimensionsSeparated = false; }
+  constructor(layer, value, name) { this.layer = layer; this.v = value; this.keys = []; this.dimensionsSeparated = false; this.expression = ''; this.name = this.matchName = name || ''; }
   get value() { return this.v; }
   get numKeys() { return this.keys.length; }
   keyTime(k) { return this.keys[k - 1].t + this.layer.startTime; }
@@ -37,6 +37,19 @@ class Group {
   property(name) { return this.map[name] || null; }
 }
 
+/* Effektlar / shape kontentlari: addProperty() bilan o'sadigan guruh; noma'lum xossa so'ralsa yaratiladi */
+class DynGroup {
+  constructor(layer, matchName) { this.layer = layer; this.matchName = this.name = matchName; this.children = []; }
+  get numProperties() { return this.children.length; }
+  addProperty(mn) { const g = new DynGroup(this.layer, mn); if (mn === 'ADBE Vector Group') g.children.push(new DynGroup(this.layer, 'ADBE Vectors Group')); this.children.push(g); return g; }
+  property(k) {
+    if (typeof k === 'number') return this.children[k - 1] || null;
+    let c = this.children.find((x) => x.matchName === k || x.name === k);
+    if (!c) { c = new Property(this.layer, 0, k); this.children.push(c); }
+    return c;
+  }
+}
+
 class TextDocument { constructor(text) { this.text = text; this.fontSize = 36; this.fillColor = [1, 1, 1]; } }
 
 class Layer {
@@ -46,12 +59,15 @@ class Layer {
     this.stretch = 100; this.locked = false; this.audioEnabled = true; this.enabled = true;
     this.hasVideo = opts.hasVideo != null ? opts.hasVideo : !!(source && source.hasVideo);
     this.hasAudio = opts.hasAudio != null ? opts.hasAudio : !!(source && source.hasAudio);
-    this.id = uid++;
+    this.id = uid++; this.comment = ''; this.parent = null; this.threeDLayer = false;
+    this.effects = new DynGroup(this, 'ADBE Effect Parade');
     const W = comp.width, H = comp.height;
     this.transform = new Group({
       'ADBE Scale': new Property(this, [100, 100, 100]),
       'ADBE Position': new Property(this, [W / 2, H / 2, 0]),
       'ADBE Rotate Z': new Property(this, 0),
+      'ADBE Rotate Y': new Property(this, 0),
+      'ADBE Rotate X': new Property(this, 0),
       'ADBE Opacity': new Property(this, 100),
       'ADBE Anchor Point': new Property(this, [W / 2, H / 2, 0]),
     });
@@ -61,8 +77,10 @@ class Layer {
   set inPoint(v) { this._in = v; }
   get outPoint() { return this._out; }
   set outPoint(v) { this._out = v; }
-  property(name) { return name === 'ADBE Transform Group' ? this.transform : null; }
+  property(name) { return name === 'ADBE Transform Group' ? this.transform : name === 'ADBE Effect Parade' ? this.effects : null; }
+  setParentWithJump(p) { this.parent = p; }
   get selected() { return !!this._sel; }
+  set selected(v) { this._sel = !!v; }
   remove() { this.comp._layers.splice(this.comp._layers.indexOf(this), 1); }
   duplicate() {
     const d = Object.create(Object.getPrototypeOf(this));
@@ -87,7 +105,10 @@ class TextLayer extends AVLayer {
   }
   property(name) { return name === 'ADBE Text Properties' ? this.textGroup : super.property(name); }
 }
-class ShapeLayer extends AVLayer {}
+class ShapeLayer extends AVLayer {
+  constructor(comp) { super(comp, null, { name: 'Shape Layer', hasVideo: true, hasAudio: false, duration: comp.duration }); this.contents = new DynGroup(this, 'ADBE Root Vectors Group'); }
+  property(name) { return name === 'ADBE Root Vectors Group' ? this.contents : super.property(name); }
+}
 
 class FolderItem { constructor(name) { this.name = name; this.id = uid++; this.parentFolder = null; } }
 class FootageItem {
@@ -95,7 +116,7 @@ class FootageItem {
     this.file = file; this.name = path.basename(file.fsName); this.id = uid++; this.parentFolder = null;
     this.duration = opts.duration != null ? opts.duration : 5; this.hasVideo = opts.hasVideo !== false; this.hasAudio = !!opts.hasAudio;
     this.mainSource = { conformFrameRate: 0, alphaMode: 0 };
-    this.frames = opts.frames || 0;
+    this.frames = opts.frames || 0; this.width = opts.width || 1400; this.height = opts.height || 700;
   }
 }
 
@@ -108,6 +129,8 @@ class CompItem {
     this.layers = {
       add(item) { const L = new AVLayer(comp, item); comp._layers.unshift(L); return L; },
       addText(text) { const L = new TextLayer(comp, text); comp._layers.unshift(L); return L; },
+      addShape() { const L = new ShapeLayer(comp); comp._layers.unshift(L); return L; },
+      addNull(d) { const L = new AVLayer(comp, null, { name: 'Null', hasVideo: false, hasAudio: false, duration: d || comp.duration }); L.isNull = true; comp._layers.unshift(L); return L; },
     };
   }
   get frameDuration() { return 1 / this.frameRate; }
@@ -193,7 +216,7 @@ function loadHost(env) {
   const globals = ['app', '$', 'File', 'Folder', 'ImportOptions', 'CompItem', 'FootageItem', 'FolderItem', 'AVLayer', 'TextLayer', 'ShapeLayer', 'ParagraphJustification', 'AlphaMode'];
   const fn = new Function(...globals, src + '\nreturn {' + names.join(',') + '};');
   const api = fn(env.app, env.$, env.File, env.Folder, env.ImportOptions, env.CompItem, env.FootageItem, env.FolderItem, env.AVLayer, env.TextLayer, env.ShapeLayer,
-    { CENTER_JUSTIFY: 7413 }, { STRAIGHT: 1 });
+    { CENTER_JUSTIFY: 7413, LEFT_JUSTIFY: 7414, RIGHT_JUSTIFY: 7415 }, { STRAIGHT: 1 });
   const call = (name, ...args) => JSON.parse(api[name](...JSON.parse(JSON.stringify(args))));
   return { api, call };
 }

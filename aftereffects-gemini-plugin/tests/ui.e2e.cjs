@@ -133,10 +133,44 @@ const AEFT = `window.__adobe_cep__.getHostEnvironment = () => JSON.stringify({ a
   await page.click('.tx-card[data-id="pop"]');
   await page.fill('#txText', 'SALOM');
   await page.evaluate(() => { const r = window.GCText.recipe(); r.duration = 1; window.GCText.setRecipe(r); });
+  check(await page.isVisible('#txMode') && /Character/.test(await page.textContent('#txModeHint')), 'tahrirlanadigan rejim (standart), AE izohi');
   await page.click('#txInsert');
-  await page.waitForFunction(() => /✓|XATO/i.test(document.getElementById('txStatus').textContent), null, { timeout: 120000 }).catch(() => {});
-  const top = ae.comp.layer(1);
-  check(top.source && /gc_0000\.png/.test(top.source.file.fsName) && Math.abs(top.outPoint - top.inPoint - 1) < 1e-6, 'animatsion matn eng yuqori qatlamga (1s): ' + await page.textContent('#txStatus'));
+  await page.waitForFunction(() => /✓|XATO|topilmadi/i.test(document.getElementById('txStatus').textContent), null, { timeout: 120000 }).catch(() => {});
+  let top = ae.comp.layer(1);
+  check(top.textGroup && top.textGroup.map['ADBE Text Document'].v.text === 'SALOM' && /^GeminiCut:/.test(top.comment) && top.transform.map['ADBE Scale'].numKeys >= 3,
+    'AE matn qatlami (keyframe animatsiya bilan): ' + await page.textContent('#txStatus'));
+  // AE'da qatlamni tanlab, panelda qayta tahrirlash
+  ae.comp._layers.forEach((l) => { l.selected = false; }); top.selected = true; ae.comp.time = 0;
+  await page.fill('#txText', 'BOSHQA');
+  await page.click('#txEdit');
+  await page.waitForTimeout(400);
+  check((await page.$eval('#txText', (e) => e.value)) === 'SALOM' && /Yangilash/.test(await page.textContent('#txInsert')), 'tanlangan AE qatlami tahrirga yuklandi');
+  await page.fill('#txText', 'KUCH');
+  const nBefore = ae.comp.numLayers;
+  await page.click('#txInsert');
+  await page.waitForFunction(() => /yangilandi/i.test(document.getElementById('txStatus').textContent), null, { timeout: 60000 }).catch(() => {});
+  top = ae.comp.layer(1);
+  check(ae.comp.numLayers === nBefore && top.textGroup.map['ADBE Text Document'].v.text === 'KUCH', 'qatlam yangilandi (almashtirildi)');
+  // 3D logo: Null + 3D qatlamlar
+  await page.click('#txKind [data-v="3d"]');
+  await page.waitForTimeout(1500);
+  await page.click('.tx-card[data-id="logo_chimgan"]');
+  await page.click('#txInsert');
+  await page.waitForFunction(() => /✓|XATO|topilmadi/i.test(document.getElementById('txStatus').textContent) && !/yangilandi/.test(document.getElementById('txStatus').textContent), null, { timeout: 60000 }).catch(() => {});
+  const nul = ae.comp.layer(1);
+  check(nul.isNull && /Chimgan/i.test(nul.name) && ae.comp._layers.filter((l) => l.parent === nul && l.threeDLayer).length === 12 && /fitcity-chimgan\.png$/.test(ae.comp.layer(2).source.file.fsName),
+    '3D logo: Null + 12 ta 3D qatlam (asl PNG): ' + await page.textContent('#txStatus'));
+  // PNG rejimi: kadrlar ketma-ketligi
+  await page.click('#txKind [data-v="2d"]');
+  await page.waitForTimeout(600);
+  await page.click('.tx-card[data-id="pop"]');
+  await page.fill('#txText', 'SALOM');
+  await page.evaluate(() => { const r = window.GCText.recipe(); r.duration = 1; window.GCText.setRecipe(r); });
+  await page.click('#txMode [data-v="png"]');
+  await page.click('#txInsert');
+  await page.waitForFunction(() => /kadr\)/i.test(document.getElementById('txStatus').textContent), null, { timeout: 120000 }).catch(() => {});
+  top = ae.comp.layer(1);
+  check(top.source && /gc_0000\.png/.test(top.source.file.fsName) && Math.abs(top.outPoint - top.inPoint - 1) < 1e-6, 'PNG rejimi: animatsion matn kadrlar bilan (1s): ' + await page.textContent('#txStatus'));
   await shot('ae03-matn');
 
   console.log('ChatGPT');
