@@ -39,7 +39,7 @@
         <div class="logo"><svg><use href="#i-spark"/></svg></div>
         <div>
           <div class="brand-name">GeminiCut</div>
-          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.3</span></div>
+          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.4</span></div>
         </div>
       </div>
       <div class="status">
@@ -123,6 +123,7 @@
             <input id="glossary" placeholder="Masalan: Premiere Pro, Toshkent, Dilshod Rahimov" spellcheck="false" />
           </label>
           <label class="switch-row"><input type="checkbox" id="autoCaption" /><i class="switch"></i><em>Tayyor subtitrni timeline'ga avtomatik qo'shish</em></label>
+          <p class="note" data-host="ae">After Effects'da har bir subtitr alohida matn qatlami bo'lib qo'yiladi ("GeminiCut Subtitr" nomi bilan) - shrift va rangni AE'da erkin o'zgartirasiz.</p>
           <button class="btn primary big" id="btnSubs"><svg><use href="#i-spark"/></svg>Subtitr yaratish</button>
         </div>
 
@@ -206,6 +207,7 @@
             </div>
           </div>
           <p class="note">Punch-in, Silkinish va Qiyshayish playhead joyidan boshlanadi. Hammasi Ctrl+Z bilan qaytariladi.</p>
+          <p class="note" data-host="ae">After Effects'da harakat tanlangan qatlam(lar)ga keyframe bo'lib yoziladi; hech narsa tanlanmagan bo'lsa - vaqt ko'rsatkichi ostidagi eng yuqori qatlamga.</p>
           <p class="note" data-host="resolve">Resolve'da harakat klipning Fusion kompozitsiyasiga (GCTransform) yoziladi va playhead ostidagi klipga qo'llanadi.</p>
         </div>
 
@@ -241,6 +243,7 @@
           <div class="results-head"><div><div class="results-title" id="editTitle">Reja</div><div class="results-sub" id="editSub"></div></div></div>
           <div class="cue-list" id="planList"></div>
           <p class="note" data-host="ppro">Video va tanlangan nutq treklari birga kesiladi, musiqa treki tegilmaydi. Hammasi <b>Ctrl+Z</b> bilan bekor qilinadi.</p>
+          <p class="note" data-host="ae">After Effects'da pauzalar barcha (qulflanmagan) qatlamlardan bir vaqtda kesiladi, keyingi qismlar chapga suriladi va kompozitsiya qisqaradi. <b>Ctrl+Z</b> bilan bekor qilinadi.</p>
           <p class="note" data-host="resolve">Resolve'da kesishlar pauzalarsiz <b>yangi timeline</b> yaratadi ("… (GeminiCut)") - asl timeline o'zgarmaydi. Musiqani yangi timeline'ga o'zingiz qo'shasiz.</p>
           <div class="sticky-actions"><button class="btn primary" id="btnApplyEdit"><svg><use href="#i-check"/></svg>Belgilanganlarni qo'llash</button></div>
         </div>
@@ -373,7 +376,7 @@
         <div class="section-heading"><div><div class="eyebrow">CHATGPT · OPENAI</div><h1>ChatGPT studiya</h1><p>Professional rang berish, montaj va motion - so'z bilan.</p></div><span class="version-chip" id="gpModelChip">GPT</span></div>
         <div class="segmented gp-mode" id="gpMode" data-host="resolve"><button data-v="color" class="on">Rang berish</button><button data-v="edit">Montaj · motion · SFX</button></div>
 
-        <p class="note" data-host="ppro">Rang berish (color grading) DaVinci Resolve versiyasida ishlaydi: GeminiCut-Resolve-Setup.bat. Bu yerda - ChatGPT bilan montaj, motion va SFX.</p>
+        <p class="note" data-host="ppro ae">Rang berish (color grading) DaVinci Resolve versiyasida ishlaydi: GeminiCut-Resolve-Setup.bat. Bu yerda - ChatGPT bilan montaj, motion va SFX.</p>
         <div id="gpColorPane" data-host="resolve">
           <div class="card">
             <div class="card-heading"><span class="step-number">01</span><h2>Qaysi kliplar</h2></div>
@@ -637,7 +640,7 @@
           <details class="log-box"><summary>Jurnal (diagnostika)</summary><pre id="log"></pre></details>
           <button class="btn ghost" id="btnClearCache">Tahlil keshini tozalash</button>
         </div>
-        <p class="about">GeminiCut <span id="ver">4.3.0</span> &middot; Premiere Pro 2022-2026</p>
+        <p class="about">GeminiCut <span id="ver">4.4.0</span> &middot; Premiere Pro 2022-2026</p>
       </section>
     </main>
 

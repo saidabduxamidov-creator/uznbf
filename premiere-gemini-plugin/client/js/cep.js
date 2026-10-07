@@ -8,6 +8,12 @@
 
   const native = root.__adobe_cep__ || null;
 
+  /* Qaysi Adobe dasturi: PPRO (Premiere) yoki AEFT (After Effects). body ga "ppro"/"ae" klassi qo'yiladi */
+  let appName = "PPRO";
+  try { appName = (JSON.parse(native.getHostEnvironment()).appName || "PPRO").toUpperCase(); } catch (e) { /* standart: Premiere */ }
+  const app = appName === "AEFT" ? "ae" : "ppro";
+  if (root.document && root.document.body) root.document.body.classList.add(app);
+
   /* JS qiymatni ExtendScript (ES3) uchun xavfsiz literalga aylantiradi */
   function literal(v) {
     return JSON.stringify(v).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
@@ -73,5 +79,5 @@
     return null;
   }
 
-  root.GCHost = { available: !!native, evalScript, call, ensureHost, openUrl, saveDialog, openDialog };
+  root.GCHost = { available: !!native, app, evalScript, call, ensureHost, openUrl, saveDialog, openDialog };
 })(window);

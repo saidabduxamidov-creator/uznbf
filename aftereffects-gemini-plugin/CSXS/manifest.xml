@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="7.0" ExtensionBundleId="com.uzstudio.geminicut"
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.uzstudio.geminicut.ae"
     ExtensionBundleVersion="4.4.0" ExtensionBundleName="GeminiCut"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
-    <Extension Id="com.uzstudio.geminicut.panel" Version="4.4.0" />
+    <Extension Id="com.uzstudio.geminicut.ae.panel" Version="4.4.0" />
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
-      <!-- Premiere Pro 2022 (22.x) dan boshlab: 2024 = 24.x, 2025 = 25.x -->
-      <Host Name="PPRO" Version="[22.0,99.9]" />
+      <!-- After Effects 2022 (22.x) dan boshlab: 2024 = 24.x, 2025 = 25.x, 2026 = 26.x -->
+      <Host Name="AEFT" Version="[22.0,99.9]" />
     </HostList>
     <LocaleList>
       <Locale Code="All" />
@@ -18,7 +18,7 @@
     </RequiredRuntimeList>
   </ExecutionEnvironment>
   <DispatchInfoList>
-    <Extension Id="com.uzstudio.geminicut.panel">
+    <Extension Id="com.uzstudio.geminicut.ae.panel">
       <DispatchInfo>
         <Resources>
           <MainPath>./client/index.html</MainPath>

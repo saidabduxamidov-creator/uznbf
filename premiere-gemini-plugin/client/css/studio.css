@@ -206,8 +206,10 @@ button:focus-visible,summary:focus-visible {outline:2px solid #a9bbff;outline-of
 .ai-writer .input-group input {font-family:var(--font);font-size:12.5px;}
 
 /* Faqat bitta dastur uchun elementlar: data-host="ppro" (Premiere) / "resolve" (DaVinci Resolve) */
-body:not(.resolve) [data-host="resolve"] {display:none !important;}
-body.resolve [data-host="ppro"] {display:none !important;}
+/* data-host - element ko'rinadigan dasturlar ro'yxati: "ppro", "ae", "resolve" (bo'sh joy bilan) */
+body:not(.resolve):not(.ae) [data-host]:not([data-host~="ppro"]) {display:none !important;}
+body.resolve [data-host]:not([data-host~="resolve"]) {display:none !important;}
+body.ae [data-host]:not([data-host~="ae"]) {display:none !important;}
 
 /* ===== 4.2: 9 ta bo'lim - ikki qatorda ===== */
 .tabs {grid-template-columns:repeat(5,minmax(0,1fr));}

@@ -19,6 +19,7 @@
     const head = Buffer.alloc(Math.min(fileSize, 1 << 16));
     fs.readSync(fd, head, 0, head.length, 0);
     const riff = head.toString("ascii", 0, 4);
+    if (riff === "FORM") return readAiff(head, fileSize);
     if ((riff !== "RIFF" && riff !== "RF64") || head.toString("ascii", 8, 12) !== "WAVE") {
       throw new Error("Eksport qilingan fayl WAV emas. Sozlamalarda WAV (Waveform Audio) presetini tanlang.");
     }
@@ -48,6 +49,36 @@
     return { fmt, dataOffset, dataSize };
   }
 
+  /* AIFF / AIFC (After Effects "AIFF 48kHz" shabloni): katta-endian PCM, SSND bo'lagi */
+  function readAiff(head, fileSize) {
+    const kind = head.toString("ascii", 8, 12);
+    if (kind !== "AIFF" && kind !== "AIFC") throw new Error("Eksport qilingan fayl WAV/AIFF emas.");
+    let pos = 12, fmt = null, dataOffset = -1, dataSize = 0;
+    while (pos + 8 <= head.length) {
+      const id = head.toString("ascii", pos, pos + 4);
+      const size = head.readUInt32BE(pos + 4);
+      if (id === "COMM") {
+        const channels = head.readUInt16BE(pos + 8);
+        const bits = head.readUInt16BE(pos + 14);
+        const e = ((head[pos + 16] & 0x7f) << 8) | head[pos + 17];
+        const mant = head.readUInt32BE(pos + 18) * Math.pow(2, -31) + head.readUInt32BE(pos + 22) * Math.pow(2, -63);
+        const sampleRate = Math.round(mant * Math.pow(2, e - 16383));
+        const comp = kind === "AIFC" && size >= 22 ? head.toString("ascii", pos + 26, pos + 30) : "NONE";
+        if (comp !== "NONE" && comp !== "sowt") throw new Error("AIFF siqilgan (" + comp + ") - qo'llab-quvvatlanmaydi.");
+        fmt = { format: 1, channels, sampleRate, blockAlign: channels * (bits / 8), bits, bigEndian: comp !== "sowt" };
+      } else if (id === "SSND") {
+        const off = head.readUInt32BE(pos + 8);
+        dataOffset = pos + 16 + off;
+        dataSize = Math.min(size - 8 - off, fileSize - dataOffset);
+        break;
+      }
+      pos += 8 + size + (size & 1);
+    }
+    if (!fmt || dataOffset < 0) throw new Error("AIFF fayl tuzilishi noto'g'ri.");
+    if (![16, 24, 32].includes(fmt.bits)) throw new Error(`Bu AIFF formati qo'llab-quvvatlanmaydi (${fmt.bits}-bit).`);
+    return { fmt, dataOffset, dataSize };
+  }
+
   /* WAV -> Float32Array (16 kHz, mono). onProgress(0..1) */
   async function decodeWav(path, onProgress) {
     const fs = require("fs");
@@ -61,7 +92,9 @@
       const ratio = sampleRate / TARGET_SR;
       const out = new Float32Array(Math.ceil(totalFrames / ratio) + 1);
 
-      const read = format === 3
+      const read = fmt.bigEndian
+        ? (bits === 16 ? (b, o) => b.readInt16BE(o) / 32768 : bits === 24 ? (b, o) => b.readIntBE(o, 3) / 8388608 : (b, o) => b.readInt32BE(o) / 2147483648)
+        : format === 3
         ? (b, o) => b.readFloatLE(o)
         : bits === 16 ? (b, o) => b.readInt16LE(o) / 32768
           : bits === 24 ? (b, o) => b.readIntLE(o, 3) / 8388608

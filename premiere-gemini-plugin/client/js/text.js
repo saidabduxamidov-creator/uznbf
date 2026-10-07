@@ -199,7 +199,7 @@
       status("Timeline'ga qo'yilmoqda…");
       const name = `Matn · ${T().byId(R.template).name} · ${String(R.text).split(/\n/)[0].slice(0, 24)}`;
       const r = await window.GCHost.call("gc_importSequence", [out.first, out.count, fps, -1, editing, name], 180000);
-      status(`✓ ${editing ? "Matn yangilandi" : "Matn qo'yildi"}: V${r.track + 1}, ${window.GCSubs.formatClock(r.seconds)} (${out.count} kadr).`);
+      status(`✓ ${editing ? "Matn yangilandi" : "Matn qo'yildi"}: ${window.GCHost.app === "ae" ? "qatlam #" + (r.track + 1) : "V" + (r.track + 1)}, ${window.GCSubs.formatClock(r.seconds)} (${out.count} kadr).`);
       stopEditing();
       window.GCApplication.timelineChanged();
     } catch (e) {
@@ -223,7 +223,7 @@
       syncControls();
       $("txInsert").querySelector("span").textContent = "Yangilash (almashtirish)";
       $("txStopEdit").hidden = false;
-      status(`Tahrirlanmoqda: V${r.track + 1}, ${window.GCSubs.formatClock(r.start)}. O'zgartiring va “Yangilash” ni bosing.`);
+      status(`Tahrirlanmoqda: ${window.GCHost.app === "ae" ? "qatlam #" + (r.track + 1) : "V" + (r.track + 1)}, ${window.GCSubs.formatClock(r.start)}. O'zgartiring va “Yangilash” ni bosing.`);
     } catch (e) { status(e.message, true); }
   }
 

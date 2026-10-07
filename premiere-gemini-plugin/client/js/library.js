@@ -257,7 +257,7 @@
         card.classList.add("busy");
         try {
           const r = await insert(item);
-          status(`✓ "${item.name}" A${r.track + 1} trekka ${r.at.toFixed(2)}s da qo'yildi.`);
+          status(window.GCHost.app === "ae" ? `✓ "${item.name}" qatlam bo'lib ${r.at.toFixed(2)}s da qo'yildi.` : `✓ "${item.name}" A${r.track + 1} trekka ${r.at.toFixed(2)}s da qo'yildi.`);
         } catch (err) { status(err.message, true); }
         finally { card.classList.remove("busy"); }
       };

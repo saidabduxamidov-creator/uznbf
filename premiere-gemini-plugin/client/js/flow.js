@@ -93,7 +93,7 @@ CRITICAL RESTRICTIONS:
     const r = await window.GCHost.call("gc_flowImport", [file, cap.sequenceID, cap.ticks, cap.projectPath, $("flowPosition").value === "current"], 120000);
     if (file === last.video) last.imported = true;
     steps(5);
-    message(r.alreadyPlaced ? "Bu video timeline'da allaqachon bor." : `✓ Video yangi V${r.track} trekka qo'yildi (${r.seconds.toFixed(2)} s).`);
+    message(r.alreadyPlaced ? "Bu video timeline'da allaqachon bor." : (window.GCHost.app === "ae" ? `✓ Video yangi qatlam bo'lib qo'yildi (${r.seconds.toFixed(2)} s).` : `✓ Video yangi V${r.track} trekka qo'yildi (${r.seconds.toFixed(2)} s).`));
     window.GCApplication.timelineChanged();
   }
 

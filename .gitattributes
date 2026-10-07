@@ -4,3 +4,4 @@
 # aks holda cmd.exe "goto :label" ni topa olmaydi. Shuning uchun ular baytma-bayt saqlanadi.
 GeminiCut-Setup.bat -text
 GeminiCut-Resolve-Setup.bat -text
+GeminiCut-AE-Setup.bat -text
