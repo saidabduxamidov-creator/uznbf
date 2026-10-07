@@ -21,6 +21,7 @@
 
   function load() {
     try { R = Object.assign({}, T().DEFAULT, JSON.parse(localStorage.getItem(LS) || "null") || {}); } catch (e) { R = Object.assign({}, T().DEFAULT); }
+    if (!T().TEMPLATES.some((t) => t.id === R.template)) R = T().recipeFor("pop", { text: R.text }); // olib tashlangan shablon
     kind = T().byId(R.template).kind;
   }
   function save() { try { localStorage.setItem(LS, JSON.stringify(R)); } catch (e) { /* e'tiborsiz */ } }
@@ -35,7 +36,7 @@
   function renderGrid() {
     const box = $("txGrid");
     box.innerHTML = "";
-    T().TEMPLATES.filter((t) => t.kind === kind).forEach((tp) => {
+    T().TEMPLATES.filter((t) => t.kind === kind).sort((a, b) => (b.logo ? 1 : 0) - (a.logo ? 1 : 0)).forEach((tp) => { // logolar birinchi
       const b = document.createElement("button");
       b.className = "tx-card" + (R.template === tp.id ? " on" : "");
       b.dataset.id = tp.id;
@@ -57,16 +58,22 @@
       const id = b.dataset.id, c = b.querySelector("canvas");
       if (thumbsDone[id]) { c.getContext("2d").drawImage(thumbsDone[id], 0, 0); return; }
       const tp = T().byId(id);
-      const sample = { "3d": "3D", plate: "MATN", wedding: "A & M", bg: "" }[tp.kind];
+      const sample = { "3d": "3D", plate: "MATN" }[tp.kind];
       const lower = tp.oneLine && tp.sub && tp.id !== "plate_subscribe";
       const base = { duration: 3, x: lower ? 0.1 : 0.5, y: lower ? 0.55 : 0.5 };
       if (sample != null) base.text = sample;
       if (tp.kind === "2d") Object.assign(base, { text: lower ? "Ism Familiya" : "MATN", sub: "Lavozim", size: lower ? 0.12 : 0.24 });
       if (tp.kind === "3d") base.size = 0.42;
       if (tp.kind === "plate") Object.assign(base, { text: tp.id === "plate_chat" ? "Salom!\nQalaysiz?" : tp.id === "plate_subscribe" ? "OBUNA" : "MATN", size: tp.id === "plate_chat" ? 0.12 : 0.16, sub: tp.id === "plate_subscribe" ? "TAYYOR" : "Lavozim" });
-      if (tp.kind === "wedding") Object.assign(base, { size: 0.3, sub: "" });
       const rec = T().recipeFor(id, base);
-      if (tp.kind === "plate" || tp.kind === "wedding") { rec.text = base.text; rec.size = base.size; } // qisqa namuna - kartada katta ko'rinsin
+      if (tp.kind === "plate") { rec.text = base.text; rec.size = base.size; } // qisqa namuna - kartada katta ko'rinsin
+      if (tp.kind === "3d" && !tp.logo) rec.size = 0.42;
+      if (tp.kind === "gym") { rec.size = Math.min(0.32, (tp.set.size || 0.08) * 2.6); if (lower) rec.size = 0.13; }
+      if (tp.logo) {
+        rec.size = 0.26;
+        if (tp.custom) { rec.logo = customLogo(); if (!rec.logo) { rec.text = "LOGO"; rec.material = "chrome"; } }
+        if (rec.logo && !T().logoReady(rec.logo)) { T().loadLogo(rec.logo).then(() => requestAnimationFrame(drawThumbs)).catch(() => {}); return; }
+      }
       if (tp.kind === "plate" && !/chat|subscribe/.test(id)) rec.size = 0.26;
       const off = document.createElement("canvas"); off.width = 192; off.height = 108;
       try {
@@ -83,9 +90,14 @@
     });
   }
 
+  const LS_LOGO = "geminicut.text.customLogo";
+  function customLogo() { try { return localStorage.getItem(LS_LOGO) || ""; } catch (e) { return ""; } }
+
   function pickTemplate(id) {
     const prev = R, tp = T().byId(id);
     R = T().recipeFor(id, { duration: prev.duration, speed: prev.speed });
+    if (tp.custom) R.logo = customLogo();
+    if (tp.logo) { R.duration = Math.max(prev.duration, 3); }
     // foydalanuvchi yozgan matn saqlanadi (shablonning namuna matni faqat standart matn o'rniga)
     if (prev.text && (prev.text !== T().DEFAULT.text || !(tp.set && tp.set.text))) R.text = prev.text;
     if (prev.sub) R.sub = prev.sub;
@@ -99,7 +111,8 @@
     kind = k;
     document.querySelectorAll("#txKind button").forEach((b) => b.classList.toggle("on", b.dataset.v === k));
     document.querySelectorAll("#view-text [data-kind]").forEach((el) => { el.hidden = !el.dataset.kind.split(" ").includes(k); });
-    if (T().byId(R.template).kind !== k) pickTemplate(T().TEMPLATES.find((t) => t.kind === k).id);
+    if (T().byId(R.template).kind !== k) pickTemplate((T().TEMPLATES.find((t) => t.kind === k && t.logo && !t.custom) || T().TEMPLATES.find((t) => t.kind === k)).id);
+    syncControls();
     renderGrid();
   }
 
@@ -111,13 +124,19 @@
     ["txSize", "size", "num"], ["txSpacing", "spacing", "num"], ["txShadow", "shadow", "num"], ["txStroke", "stroke", "num"], ["txGlow", "glow", "num"],
     ["txMaterial", "material", "value"], ["txLiquid", "liquid", "num"], ["txFlow", "flow", "num"], ["txDepth", "depth", "num"], ["txRot", "rot", "num"],
     ["txBevel", "bevel", "num"], ["txDrops", "drops", "checked"], ["txX", "x", "num"], ["txY", "y", "num"], ["txDur", "duration", "num"], ["txSpeed", "speed", "num"],
-    ["txNoText", "noText", "checked"], ["txPadX", "padX", "num"], ["txPadY", "padY", "num"], ["txDensity", "density", "num"],
+    ["txNoText", "noText", "checked"], ["txPadX", "padX", "num"], ["txPadY", "padY", "num"],
   ];
 
   function syncControls() {
     BIND.forEach(([id, key, prop]) => { const el = $(id); if (!el) return; if (prop === "checked") el.checked = !!R[key]; else el.value = R[key]; });
     document.querySelectorAll("#txWeight button").forEach((b) => b.classList.toggle("on", Number(b.dataset.v) === Number(R.weight) || (Number(b.dataset.v) === 700 && R.weight >= 600 && R.weight < 850) || (Number(b.dataset.v) === 900 && R.weight >= 850)));
-    $("txSubWrap").hidden = !T().byId(R.template).sub;
+    const tp = T().byId(R.template);
+    $("txSubWrap").hidden = !tp.sub;
+    // logo shablonlari: matn va rang kerak emas, faqat 3D sozlamalari
+    if (tp.noText) $("txTextCard").hidden = true; else if (tp.kind === kind) $("txTextCard").hidden = false;
+    document.querySelectorAll("#view-text .tx-nologo").forEach((el) => { el.hidden = !!tp.logo; });
+    $("txLogoRow").hidden = !tp.custom;
+    $("txLogoPath").value = tp.custom ? R.logo || "" : "";
     $("txSizeVal").textContent = Math.round(R.size * 1000) / 10 + "%";
     $("txDurVal").textContent = Number(R.duration).toFixed(1) + "s";
     document.querySelectorAll("#txPos button").forEach((b) => b.classList.toggle("on", Math.abs(Number(b.dataset.x) - R.x) < 0.02 && Math.abs(Number(b.dataset.y) - R.y) < 0.02));
@@ -183,7 +202,9 @@
 
   async function insert() {
     if (busy) return;
-    if (!String(R.text || "").trim()) return status("Matnni yozing.", true);
+    const tpl = T().byId(R.template);
+    if (tpl.custom && !R.logo) return status("Avval logo PNG faylini yuklang.", true);
+    if (!tpl.noText && !String(R.text || "").trim()) return status("Matnni yozing.", true);
     if (!window.GCHost.available) return status("Panel muharrir ichida ochilishi kerak.", true);
     busy = true; token = window.GCGemini.createCancelToken();
     setBusy(true);
@@ -197,7 +218,7 @@
       const out = await T().render(R, dir, { width: W, height: H, fps, token,
         onProgress: (i, total) => { $("txBar").style.width = Math.round((i / total) * 100) + "%"; $("txProgLabel").textContent = `${i}/${total}`; status(`Kadrlar chizilmoqda… ${i}/${total}`); } });
       status("Timeline'ga qo'yilmoqda…");
-      const name = `Matn · ${T().byId(R.template).name} · ${String(R.text).split(/\n/)[0].slice(0, 24)}`;
+      const name = tpl.logo ? `Logo 3D · ${tpl.custom ? require("path").basename(R.logo) : tpl.name}` : `Matn · ${tpl.name} · ${String(R.text).split(/\n/)[0].slice(0, 24)}`;
       const r = await window.GCHost.call("gc_importSequence", [out.first, out.count, fps, -1, editing, name], 180000);
       status(`✓ ${editing ? "Matn yangilandi" : "Matn qo'yildi"}: ${window.GCHost.app === "ae" ? "qatlam #" + (r.track + 1) : "V" + (r.track + 1)}, ${window.GCSubs.formatClock(r.seconds)} (${out.count} kadr).`);
       stopEditing();
@@ -248,12 +269,12 @@
     btn.disabled = true;
     status("AI matn va uslubni tanlamoqda…");
     try {
-      const ids = T().TEMPLATES.filter((t) => t.kind !== "bg").map((t) => t.id);
+      const ids = T().TEMPLATES.filter((t) => !t.logo).map((t) => t.id);
       const tr = (window.GCApplication.transcript() || []).filter((s) => s.type === "speech").map((s) => s.text).join(" ").slice(0, 1500);
       const r = await window.GCAI.text({
         settings: window.GCApplication.settings(),
         system: "You design animated titles for short videos. Pick one template id and write the on-screen text (max 6 words per line, max 2 lines) in the user's language. Colours as #rrggbb with strong contrast for video.",
-        prompt: `Templates: ${T().TEMPLATES.filter((t) => t.kind !== "bg").map((t) => `${t.id} (${t.kind}, ${t.desc})`).join("; ")}\n` + (tr ? `Video speech: ${tr}\n` : "") + `Request: ${q}`,
+        prompt: `Templates: ${T().TEMPLATES.filter((t) => !t.logo).map((t) => `${t.id} (${t.kind}, ${t.desc})`).join("; ")}\n` + (tr ? `Video speech: ${tr}\n` : "") + `Request: ${q}`,
         schema: { type: "object", properties: {
           template: { type: "string", enum: ids }, text: { type: "string" }, sub: { type: "string", description: "Second line for lowerthird, else empty." },
           color: { type: "string" }, color2: { type: "string" }, accent: { type: "string" } } },
@@ -293,6 +314,14 @@
     $("txStopEdit").addEventListener("click", () => { stopEditing(); status(""); });
     $("txCancel").addEventListener("click", () => { if (token) token.cancel(); });
     $("txAI").addEventListener("click", askAI);
+    $("txLogoPick").addEventListener("click", () => {
+      const p = window.GCHost.openDialog("Logo (shaffof PNG)", ["png"]);
+      if (!p) return;
+      try { localStorage.setItem(LS_LOGO, p); } catch (e) { /* e'tiborsiz */ }
+      R.logo = p; save(); syncControls();
+      delete thumbsDone.logo_custom;
+      T().loadLogo(p).then(() => { status("Logo yuklandi: " + path.basename(p)); renderGrid(); }).catch((e) => status(e.message, true));
+    });
     $("txFolder").addEventListener("click", () => {
       const d = ROOT();
       try { require("child_process").spawn(process.platform === "win32" ? "explorer.exe" : "open", [d], { detached: true, stdio: "ignore" }).unref(); } catch (e) { status(d); }

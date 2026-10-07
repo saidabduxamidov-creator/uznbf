@@ -70,6 +70,14 @@
       if (onProgress) onProgress(i + 1, list.length);
       await new Promise((r) => setTimeout(r, 0));
     }
+    // To'plamdan olib tashlangan bazaviy effektlar (faqat plagin yaratganlari) diskdan ham o'chiriladi
+    const current = new Set(list.map(({ folder, name }) => rel(path.join(ROOT, folder, name + ".wav"))));
+    state.meta.builtin = state.meta.builtin.filter((id) => {
+      if (current.has(id)) return true;
+      const f = path.join(ROOT, id);
+      try { if (fs.existsSync(f)) fs.unlinkSync(f); const d = path.dirname(f); if (d !== ROOT && !fs.readdirSync(d).length) fs.rmdirSync(d); } catch (e) { /* e'tiborsiz */ }
+      return false;
+    });
     fs.mkdirSync(path.join(ROOT, "Mening effektlarim"), { recursive: true });
     state.meta.pack = gen.PACK_VERSION;
     saveMeta();

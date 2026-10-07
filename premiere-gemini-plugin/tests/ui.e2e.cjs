@@ -52,7 +52,7 @@ function runScript(script) {
 const SHIM = fs.readFileSync(path.join(__dirname, 'browser-shim.js'), 'utf8');
 
 (async () => {
-  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--allow-file-access-from-files'] });
   const page = await browser.newPage({ viewport: { width: 420, height: 900 }, deviceScaleFactor: 2 });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -168,7 +168,7 @@ const SHIM = fs.readFileSync(path.join(__dirname, 'browser-shim.js'), 'utf8');
   check(v2.items.length === 1 && /yangilandi/.test(await page.textContent('#txStatus')), 'matn o\'rnida yangilandi: ' + await page.textContent('#txStatus'));
   await page.click('#txKind [data-v="3d"]');
   await page.waitForTimeout(1500);
-  check((await page.$$eval('#txGrid .tx-card', (e) => e.length)) === 11, '11 ta 3D shablon');
+  check((await page.$$eval('#txGrid .tx-card', (e) => e.length)) === 16, '16 ta 3D shablon (11 ta matn + 5 ta logo)');
   await page.click('.tx-card[data-id="liquid_gold"]');
   await page.fill('#txText', 'GOLD');
   await page.waitForTimeout(1500);
@@ -190,18 +190,29 @@ const SHIM = fs.readFileSync(path.join(__dirname, 'browser-shim.js'), 'utf8');
   check(/qo'yildi/.test(await page.textContent('#txStatus')), 'matnsiz shisha fon timeline\'ga qo\'yildi: ' + await page.textContent('#txStatus'));
   const lastRec = await page.evaluate(() => { const fs = require('fs'); const root = 'C:/Users/Ali/Documents/GeminiCut/Matn'; const ds = fs.readdirSync(root).sort(); return JSON.parse(fs.readFileSync(root + '/' + ds[ds.length - 1] + '/recipe.json', 'utf8')); });
   check(lastRec.template === 'plate_glass' && lastRec.noText === true, 'recipe: plate_glass, matnsiz');
-  // To'y / Zal va Fonlar
-  await page.click('#txKind [data-v="wedding"]');
+  // Gym shablonlari
+  await page.click('#txKind [data-v="gym"]');
   await page.waitForTimeout(800);
-  check((await page.$$eval('#txGrid .tx-card', (e) => e.length)) === 6 && await page.isVisible('#txSubWrap'), '6 ta to\'y/zal shablon, ikkinchi qator maydoni');
-  await shot('08c-matn-toy');
-  await page.click('#txKind [data-v="bg"]');
+  check((await page.$$eval('#txGrid .tx-card', (e) => e.length)) === 12, '12 ta Gym shablon');
+  await page.click('.tx-card[data-id="gym_banner"]');
+  await page.waitForTimeout(700);
+  check((await ink()) > 500, 'qizil banner chizildi');
+  await shot('08c-matn-gym');
+  // 3D logo: matn maydoni yashirin, logo asl ranglari bilan
+  await page.click('#txKind [data-v="3d"]');
   await page.waitForTimeout(800);
-  check((await page.$$eval('#txGrid .tx-card', (e) => e.length)) === 10 && !(await page.isVisible('#txText')), '10 ta matnsiz fon, matn maydoni yashirin');
-  await page.click('.tx-card[data-id="bg_golddust"]');
-  await page.waitForTimeout(800);
-  check((await ink()) > 50, 'oltin zarrachalar chizildi');
-  await shot('08d-fonlar');
+  await page.click('.tx-card[data-id="logo_chimgan"]');
+  await page.waitForTimeout(2500);
+  check(!(await page.isVisible('#txTextCard')) && !(await page.isVisible('#txMaterial')), 'logo: matn va material sozlamalari yashirin');
+  await page.$eval('#txScrub', (e) => { e.value = 500; e.dispatchEvent(new Event('input')); }); // animatsiya o'rtasi
+  await page.waitForTimeout(400);
+  const red = await page.$eval('#txPreview', (c) => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let r = 0, w = 0; for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 200) continue; if (d[i] > 180 && d[i + 1] < 70 && d[i + 2] < 80) r++; if (d[i] > 200 && d[i + 1] > 200 && d[i + 2] > 200) w++; } return [r, w]; });
+  check(red[0] > 100 && red[1] > 100, `3D logo asl ranglarda: qizil ${red[0]} px, oq ${red[1]} px`);
+  await shot('08d-logo-3d');
+  await page.evaluate(() => { const r = window.GCText.recipe(); r.duration = 1; window.GCText.setRecipe(r); });
+  await page.click('#txInsert');
+  await page.waitForFunction(() => /✓|XATO/i.test(document.getElementById('txStatus').textContent) && /qo'yildi|XATO/.test(document.getElementById('txStatus').textContent), null, { timeout: 240000 }).catch(() => {});
+  check(/qo'yildi/.test(await page.textContent('#txStatus')), '3D logo timeline\'ga qo\'yildi: ' + await page.textContent('#txStatus'));
 
   console.log('ChatGPT');
   await tab('chatgpt');

@@ -372,13 +372,15 @@
     ["Baraban", "Crash", () => crash(245, 3)],
     ["Baraban", "Baraban Drobi", () => { const parts = []; let t = 0; let k = 0; while (t < 1.9) { parts.push([snare(250 + k, 0.05), t, 0.25 + 0.75 * (t / 1.9)]); t += 0.055 - 0.02 * (t / 1.9); k++; } parts.push([crash(299, 2), 1.95, 0.8]); return seqMix(4, parts); }],
 
-    ["To'y", "To'y Qo'ng'iroqlari", () => { const b = seqMix(6, [[churchBell(523, 3.5), 0, 0.8], [churchBell(659, 3.5), 0.5, 0.7], [churchBell(784, 3.5), 1.0, 0.7], [churchBell(1047, 3.5), 1.5, 0.6], [churchBell(784, 3.5), 2.0, 0.6], [churchBell(523, 3.5), 2.5, 0.7]]); reverb(b[0], b[1], 0.45, 1.6); return b; }],
-    ["To'y", "Arfa Glissando", () => { const f = [262, 294, 330, 392, 440, 523, 587, 659, 784, 880, 1047, 1175, 1319, 1568]; const b = seqMix(3.2, f.map((x, k) => [pluck(260 + k, x, 2, 1.6, 0.55), k * 0.075, 0.35, 0.2 + 0.6 * k / f.length])); reverb(b[0], b[1], 0.4, 1.4); return b; }],
-    ["To'y", "Qarsaklar", () => { const r = rng(270); const parts = []; for (let k = 0; k < 260; k++) { const t = r() * 3.6; parts.push([noise(271 + k, 0.08, "bp", (tt) => [900 + r() * 1600, 1.4, env(tt, 0.0005, 0.012)]), t, 0.25 + r() * 0.3, r()]); } const b = seqMix(4.2, parts); const bed = noise(272, 4.2, "bp", (t) => [1500, 0.5, 0.12 * bell(t / 4.2)], true); return mix(b, bed, 1); }],
-    ["To'y", "Sehrli Chime", () => { const r = rng(273); const notes = [1568, 1760, 2093, 2349, 2637, 3136, 3520]; return bellTone(3, notes.map((f, k) => [f, 0.2, k * 0.09 + r() * 0.02]), 0.9, 0.55); }],
-    ["To'y", "Romantik Piano", () => { const b = mix(piano([261.6, 329.6, 392, 523.3], 4, 0.06), delayed(piano([349.2, 440, 523.3, 698.5], 3.5, 0.06), 1.6), 0.9); reverb(b[0], b[1], 0.4, 1.4); return b; }],
-    ["To'y", "Musiqa Qutisi", () => { const mel = [1047, 1319, 1568, 1319, 1175, 1397, 1760, 1568, 1319, 1047]; const b = seqMix(4.2, mel.map((f, k) => [bellTone(1.5, [[f, 0.4], [f * 2, 0.12]], 0.45, 0), k * 0.32, 0.6, 0.35 + 0.3 * (k % 2)])); reverb(b[0], b[1], 0.3, 1.2); return b; }],
 
+    ["Gym", "Shtanga Tushishi", () => { const b = mix(mix(impact(401, 2.2, 140, 42, 0.5, 1.4, 2.6, 0), bellTone(2.2, [[312, 0.25], [741, 0.18], [1290, 0.12], [2210, 0.08]], 0.9, 0), 0.7), delayed(impact(402, 1.2, 160, 50, 0.25, 0.8, 2, 0), 0.19), 0.45); reverb(b[0], b[1], 0.3, 1.2); return b; }],
+    ["Gym", "Gantel Jiringlashi", () => { const b = seqMix(1.4, [[bellTone(1.2, [[1480, 0.4], [2650, 0.3], [3910, 0.18], [5230, 0.1]], 0.35, 0), 0], [bellTone(1.0, [[1320, 0.3], [2480, 0.22], [3700, 0.12]], 0.3, 0), 0.09, 0.7]]); return mix(b, clicks(403, 0.2, [0.001, 0.09], 3000, 0.004, 1), 0.6); }],
+    ["Gym", "Trener Hushtagi", () => { const r = rng(404); return tone(1.1, (t) => { const tr = 1 + 0.035 * Math.sin(TAU * 34 * t); const e = t < 0.02 ? t / 0.02 : t > 0.95 ? Math.max(0, (1.1 - t) / 0.15) : 1; return (0.7 * Math.sin(TAU * 2780 * tr * t) + 0.25 * Math.sin(TAU * 5560 * tr * t) + 0.12 * (r() * 2 - 1)) * e * 0.6; }); }],
+    ["Gym", "Boks Qo'ng'irog'i", () => { const ding = bellTone(2.2, [[1046, 0.45], [2390, 0.25], [3720, 0.12], [5100, 0.06]], 1.1, 0); const b = seqMix(3, [[ding, 0], [ding, 0.42, 0.9]]); reverb(b[0], b[1], 0.3, 1.2); return b; }],
+    ["Gym", "Taymer 3-2-1", () => { const beep = (f, d) => tone(d, (t) => Math.sin(TAU * f * t) * (t < 0.005 ? t / 0.005 : 1) * Math.min(1, (d - t) / 0.01) * 0.6); return seqMix(3.9, [[beep(880, 0.16), 0], [beep(880, 0.16), 1], [beep(880, 0.16), 2], [beep(1760, 0.7), 3]]); }],
+    ["Gym", "Musht Zarbasi", () => mix(impact(405, 0.45, 160, 60, 0.07, 0.9, 2.2, 0), noise(406, 0.3, "lp", (t) => [1800, 0.7, env(t, 0.001, 0.025)]), 0.8)],
+    ["Gym", "Bass Zarbasi (808)", () => tone(1.6, (t) => Math.tanh(1.6 * Math.sin(TAU * (48 * t + 90 * (1 - Math.exp(-t / 0.04)) * 0.04))) * env(t, 0.002, 0.55))],
+    ["Gym", "Kuch Yig'ish", () => { const b = mix(riser(407, 1.8), delayed(mix(impact(408, 1.4, 150, 40, 0.5, 1.1, 2.5, 0.3), crash(409, 1.4), 0.35), 1.78), 1); return b; }],
     ["Tabiat", "Shamol", () => noise(280, 5, "bp", (t) => [500 + 450 * Math.sin(TAU * 0.23 * t) + 200 * Math.sin(TAU * 0.71 * t), 0.8, (0.6 + 0.4 * Math.sin(TAU * 0.17 * t + 1)) * bell(t / 5) * 1.2], true)],
     ["Tabiat", "Yomg'ir", () => { const r = rng(281); const bed = noise(282, 5, "hp", (t) => [2500, 0.5, 0.25 * Math.min(1, t * 2) * Math.min(1, (5 - t) * 2)], true); const parts = []; for (let k = 0; k < 400; k++) parts.push([tone(0.03, (t) => Math.sin(TAU * (2500 + 3000 * r()) * t) * env(t, 0.0005, 0.006)), r() * 4.9, 0.15 + r() * 0.2, r()]); return mix(bed, seqMix(5, parts), 1); }],
     ["Tabiat", "Momaqaldiroq", () => { const rum = noise(283, 6, "lp", (t) => [120 + 300 * Math.exp(-t / 0.4), 0.7, env(t, 0.02, 1.6) * (1 + 0.5 * Math.sin(TAU * 1.3 * t))], true); const crack = noise(284, 1, "hp", (t) => [1500, 0.6, env(t, 0.001, 0.15)], true); const b = mix(rum, crack, 0.7); reverb(b[0], b[1], 0.35, 1.6); return b; }],
@@ -450,7 +452,7 @@
     return buf;
   }
 
-  const api = { PACK_VERSION: 2, SR, list: () => PACK.map(([folder, name]) => ({ folder, name })), render: (index) => toWav(PACK[index][2]()) };
+  const api = { PACK_VERSION: 3, SR, list: () => PACK.map(([folder, name]) => ({ folder, name })), render: (index) => toWav(PACK[index][2]()) };
   root.GCSfxGen = api;
   if (typeof module === "object" && module && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

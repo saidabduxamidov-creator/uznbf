@@ -62,7 +62,7 @@ const ELECTRON = `(function () {
 })();`;
 
 (async () => {
-  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--allow-file-access-from-files'] });
   const page = await browser.newPage({ viewport: { width: 420, height: 900 }, deviceScaleFactor: 2 });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));

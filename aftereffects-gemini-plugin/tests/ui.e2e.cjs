@@ -53,7 +53,7 @@ const SHIM = fs.readFileSync(path.join(ROOT, 'premiere-gemini-plugin', 'tests', 
 const AEFT = `window.__adobe_cep__.getHostEnvironment = () => JSON.stringify({ appName: "AEFT", appVersion: "25.2" });`;
 
 (async () => {
-  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--allow-file-access-from-files'] });
   const page = await browser.newPage({ viewport: { width: 420, height: 900 }, deviceScaleFactor: 2 });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));

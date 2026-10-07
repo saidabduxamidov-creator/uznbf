@@ -62,9 +62,19 @@
     { id: "candy", kind: "3d", name: "3D Candy", desc: "Yaltiroq plastik, gradient rang", set: { size: 0.13, material: "candy", color: "#7b5cff", color2: "#00d5ff", liquid: 0.2, bevel: 0.1 } },
     { id: "neon3d", kind: "3d", name: "3D Neon", desc: "Yonib turgan neon trubka, atrofida nur", set: { size: 0.13, material: "neon", color: "#ff2bd6", color2: "#ffffff", liquid: 0.15, bevel: 0.14, depth: 0.2 } },
     { id: "marble3d", kind: "3d", name: "Marmar", desc: "Oq marmar, oltin tomirlar", set: { size: 0.13, material: "marble", color: "#f4f1ec", color2: "#c8973a", liquid: 0.1, bevel: 0.05 } },
-    { id: "rosegold", kind: "3d", name: "Rose gold", desc: "Pushti oltin metall - to'y va bayramlar uchun", set: { size: 0.13, material: "gold", color: "#f2b8a2", color2: "#d9817a", liquid: 0.45 } },
+    { id: "rosegold", kind: "3d", name: "Rose gold", desc: "Pushti oltin metall", set: { size: 0.13, material: "gold", color: "#f2b8a2", color2: "#d9817a", liquid: 0.45 } },
     { id: "ice3d", kind: "3d", name: "Muz", desc: "Sovuq muz kristali", set: { size: 0.13, material: "glass", color: "#cdeeff", color2: "#ffffff", liquid: 0.9, flow: 0.4, bevel: 0.04 } },
   ];
+  /* Logolar: rasm o'zgarmaydi, faqat 3D hajm, yorug'lik va harakat qo'shiladi */
+  const LOGO_SET = { material: "logo", liquid: 0, drops: false, depth: 0.16, bevel: 0.025, rot: 32, size: 0.1, duration: 4 };
+  [["logo_chimgan", "FitCity Chimgan", "fitcity-chimgan"], ["logo_jurjoniy", "FitCity Jurjoniy", "fitcity-jurjoniy"],
+    ["logo_malika", "FitCity Malika", "fitcity-malika"], ["logo_parlament", "FitCity Parlament", "fitcity-parlament"]].forEach(([id, name, file]) => {
+    TEMPLATES.push({ id, kind: "3d", name, desc: "3D logo - asl rang va shakl o'zgarmaydi", logo: true, noText: true,
+      set: Object.assign({ logo: "assets/logos/" + file + ".png" }, LOGO_SET) });
+  });
+  TEMPLATES.push({ id: "logo_custom", kind: "3d", name: "O'z logongiz", desc: "Shaffof PNG logoni yuklang - 3D bo'lib chiqadi", logo: true, noText: true, custom: true,
+    set: Object.assign({ logo: "" }, LOGO_SET) });
+
   /* Qo'shimcha shablon modullari (textfx-plates.js) shu yerga qo'shadi */
   function register(list, draws) { list.forEach((t) => TEMPLATES.push(t)); Object.assign(DRAW2D, draws || {}); }
   const byId = (id) => TEMPLATES.find((t) => t.id === id) || TEMPLATES[0];
@@ -435,10 +445,101 @@
     return { data: out, w, h, hx: w / unit / 2, hy: h / unit / 2, spreadW: spread / unit };
   }
 
+  /* Maska (Uint8 alfa, 0..255) dan imzoli masofa maydoni. unit - 1 dunyo birligi necha piksel */
+  function maskSdf(alpha, w, h, pad, unit) {
+    const n = w * h, inside = new Float64Array(n), outside = new Float64Array(n);
+    for (let i = 0; i < n; i++) { const on = alpha[i] > 127; outside[i] = on ? 0 : 1e20; inside[i] = on ? 1e20 : 0; }
+    edt2d(outside, w, h); edt2d(inside, w, h);
+    const out = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      const dpx = outside[i] - inside[i] + (outside[i] > 0 ? -0.5 : 0.5);
+      out[i] = clamp(Math.round(128 + (dpx / pad) * 127), 0, 255);
+    }
+    return { data: out, w, h, hx: w / unit / 2, hy: h / unit / 2, spreadW: pad / unit };
+  }
+
+  /*
+   * Logo (shaffof PNG): rasm o'zgarmaydi - shaffoflik maskasidan 3D hajm (SDF),
+   * old yuza esa aynan rasmning ranglari. Chetdagi shaffof piksellarga yaqin rang "yoyiladi"
+   * (bilinear o'qishda qora/oq hoshiya chiqmasin).
+   */
+  const LOGOS = {};
+  /* Rasm Node fs orqali o'qilib Blob URL qilinadi - file:// rasm canvas'ni "ifloslantirmasin" */
+  function logoUrl(src) {
+    const abs = /^([A-Za-z]:[\\/]|\/|\\\\)/.test(src);
+    let file = src;
+    if (!abs) {
+      try {
+        file = decodeURIComponent(new URL(src, root.location.href).pathname);
+        if (/^\/[A-Za-z]:\//.test(file)) file = file.slice(1);
+      } catch (e) { return src; }
+    }
+    try {
+      const buf = require("fs").readFileSync(file);
+      return URL.createObjectURL(new Blob([buf], { type: "image/png" }));
+    } catch (e) {
+      if (abs) throw new Error("Logo fayli topilmadi: " + src);
+      return src; // plagin ichidagi assets/... (to'g'ridan-to'g'ri)
+    }
+  }
+  function loadLogo(src) {
+    if (!src) return Promise.reject(new Error("Logo tanlanmagan."));
+    if (LOGOS[src]) return LOGOS[src].promise;
+    const entry = LOGOS[src] = { ready: false };
+    entry.promise = new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const MAXW = 1100;
+          const pad = Math.round(Math.min(img.width, img.height) * 0.18);
+          const k = Math.min(1, (MAXW - 2 * pad) / img.width);
+          const iw = Math.round(img.width * k), ih = Math.round(img.height * k);
+          const w = iw + 2 * pad, h = ih + 2 * pad;
+          const c = document.createElement("canvas"); c.width = w; c.height = h;
+          const g = c.getContext("2d");
+          g.drawImage(img, pad, pad, iw, ih);
+          const id = g.getImageData(0, 0, w, h), d = id.data;
+          const alpha = new Uint8Array(w * h);
+          for (let i = 0; i < w * h; i++) alpha[i] = d[i * 4 + 3];
+          // rang yoyish: shaffof piksel qo'shni ko'rinadigan piksel rangini oladi (bir necha o'tish)
+          const filled = new Uint8Array(w * h);
+          for (let i = 0; i < w * h; i++) filled[i] = alpha[i] > 8 ? 1 : 0;
+          for (let pass = 0; pass < 10; pass++) {
+            const next = filled.slice();
+            for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+              const i = y * w + x;
+              if (filled[i]) continue;
+              let r = 0, gg = 0, b = 0, cnt = 0;
+              for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                const xx = x + dx, yy = y + dy;
+                if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+                const j = yy * w + xx;
+                if (!filled[j]) continue;
+                r += d[j * 4]; gg += d[j * 4 + 1]; b += d[j * 4 + 2]; cnt++;
+              }
+              if (cnt) { d[i * 4] = r / cnt; d[i * 4 + 1] = gg / cnt; d[i * 4 + 2] = b / cnt; next[i] = 1; }
+            }
+            filled.set(next);
+          }
+          for (let i = 0; i < w * h; i++) d[i * 4 + 3] = 255;
+          const color = document.createElement("canvas"); color.width = w; color.height = h;
+          color.getContext("2d").putImageData(id, 0, 0);
+          entry.sdf = maskSdf(alpha, w, h, pad, ih);
+          entry.color = color; entry.ready = true;
+          resolve(entry);
+        } catch (e) { reject(e); }
+      };
+      img.onerror = () => { delete LOGOS[src]; reject(new Error("Logo rasmi o'qilmadi: " + src)); };
+      try { img.src = logoUrl(src); } catch (e) { delete LOGOS[src]; reject(e); }
+    });
+    return entry.promise;
+  }
+  const logoReady = (src) => !!(LOGOS[src] && LOGOS[src].ready);
+
   const VS = "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }";
   const FS = `
 precision highp float;
-uniform vec2 uRes; uniform vec2 uCenter; uniform float uPx; uniform sampler2D uSdf;
+uniform vec2 uRes; uniform vec2 uCenter; uniform float uPx; uniform sampler2D uSdf; uniform sampler2D uImg;
 uniform vec2 uHalf; uniform float uSpread; uniform float uDepth; uniform float uBevel;
 uniform mat3 uRot; uniform float uScale; uniform vec3 uOff; uniform float uTime; uniform float uLiquid;
 uniform float uFlow; uniform float uDrops; uniform float uAlpha; uniform int uMat; uniform vec3 uCol; uniform vec3 uCol2;
@@ -554,13 +655,22 @@ void main(){
     float v = smoothstep(0.92, 1.0, vein) + 0.35 * smoothstep(0.75, 1.0, abs(sin(p.y * 9.0 + noise(p * 4.0) * 3.0)));
     vec3 stone = mix(uCol, uCol2, clamp(v, 0.0, 1.0));
     col = stone * (0.35 + 0.65 * wrap) + env(rf) * 0.22 * (0.3 + fres) + spec * 0.9;
+  } else if (uMat == 9) { // logo: old yuza - rasmning o'z ranglari
+    vec2 luv = vec2(p.x / (2.0 * uHalf.x) + 0.5, 0.5 - p.y / (2.0 * uHalf.y));
+    vec3 tex = pow(texture2D(uImg, clamp(luv, 0.0, 1.0)).rgb, vec3(2.2));
+    float front = smoothstep(0.55, 0.92, abs(n.z));
+    float sweep = smoothstep(0.07, 0.0, abs(luv.x - fract(uTime * 0.33) * 1.6 + 0.3)) * 0.35 * step(0.0, n.z);
+    vec3 faceC = tex * (0.9 + 0.14 * dif) + vec3(spec * 0.3 + sweep);
+    vec3 sideC = tex * (0.32 + 0.38 * dif) + env(rf) * 0.06;
+    col = mix(sideC, faceC, front);
   } else { // candy
     col = base * (0.3 + 0.7 * dif) + spec * 1.3 + env(rf) * 0.35 * (0.2 + fres);
   }
-  gl_FragColor = vec4(tone(col), a * cover * uAlpha);
+  vec3 outc = uMat == 9 ? pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2)) : tone(col); // logo ranglari o'zgarmasin
+  gl_FragColor = vec4(outc, a * cover * uAlpha);
 }`;
 
-  const MATS = { gold: 0, chrome: 1, jelly: 2, glass: 3, water: 4, lava: 5, candy: 6, neon: 7, marble: 8 };
+  const MATS = { gold: 0, chrome: 1, jelly: 2, glass: 3, water: 4, lava: 5, candy: 6, neon: 7, marble: 8, logo: 9 };
   const hex = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(String(h || "")); const v = m ? parseInt(m[1], 16) : 0xffffff; return [(v >> 16 & 255) / 255, (v >> 8 & 255) / 255, (v & 255) / 255]; };
   const toLin = (c) => c.map((x) => Math.pow(x, 2.2));
 
@@ -592,17 +702,31 @@ void main(){
       gl.bindBuffer(gl.ARRAY_BUFFER, buf);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       this.tex = gl.createTexture();
+      this.img = gl.createTexture();
       this.u = {};
-      ["uRes", "uCenter", "uPx", "uSdf", "uHalf", "uSpread", "uDepth", "uBevel", "uRot", "uScale", "uOff", "uTime", "uLiquid", "uFlow", "uDrops", "uAlpha", "uMat", "uCol", "uCol2"]
+      ["uRes", "uCenter", "uPx", "uSdf", "uImg", "uHalf", "uSpread", "uDepth", "uBevel", "uRot", "uScale", "uOff", "uTime", "uLiquid", "uFlow", "uDrops", "uAlpha", "uMat", "uCol", "uCol2"]
         .forEach((n) => { this.u[n] = gl.getUniformLocation(pr, n); });
       this.sdfKey = "";
     }
 
     setText(R) {
-      const key = [R.text, R.font, R.weight, R.italic, R.upper, R.spacing].join("|");
-      if (key === this.sdfKey) return;
-      const s = textSdf(R);
+      const key = R.logo ? "logo|" + R.logo : [R.text, R.font, R.weight, R.italic, R.upper, R.spacing].join("|");
+      if (key === this.sdfKey) return true;
       const gl = this.gl;
+      let s;
+      if (R.logo) {
+        if (!logoReady(R.logo)) { loadLogo(R.logo).catch(() => {}); return false; }
+        s = LOGOS[R.logo].sdf;
+        gl.bindTexture(gl.TEXTURE_2D, this.img);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, LOGOS[R.logo].color);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      } else {
+        s = textSdf(R);
+      }
       gl.bindTexture(gl.TEXTURE_2D, this.tex);
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, s.w, s.h, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, s.data);
@@ -611,12 +735,13 @@ void main(){
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       this.sdf = s; this.sdfKey = key;
+      return true;
     }
 
     /* t soniyadagi kadr */
     draw(R, t) {
       const gl = this.gl, c = this.canvas, W = c.width, H = c.height, u = this.u;
-      this.setText(R);
+      if (!this.setText(R)) { gl.viewport(0, 0, W, H); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); return; } // logo hali yuklanmoqda
       const P = phases(R, t);
       const kin = P.inP(0, P.inD * 1.6);
       const sp = E.spring(kin);
@@ -636,6 +761,7 @@ void main(){
       gl.useProgram(this.pr);
       const loc = gl.getAttribLocation(this.pr, "p");
       gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.img); gl.uniform1i(u.uImg, 1);
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.tex); gl.uniform1i(u.uSdf, 0);
       gl.uniform2f(u.uRes, W, H);
       gl.uniform2f(u.uCenter, R.x * W, R.y * H);
@@ -652,7 +778,7 @@ void main(){
       gl.uniform1f(u.uFlow, clamp(R.flow || 1, 0, 4));
       gl.uniform1f(u.uDrops, drops);
       gl.uniform1f(u.uAlpha, clamp(Math.min(1, kin * 4) * (1 - E.inCubic(P.out)), 0, 1));
-      gl.uniform1i(u.uMat, MATS[R.material] != null ? MATS[R.material] : 0);
+      gl.uniform1i(u.uMat, R.logo ? 9 : R.material === "logo" ? 1 : MATS[R.material] != null ? MATS[R.material] : 0);
       gl.uniform3fv(u.uCol, toLin(hex(R.color)));
       gl.uniform3fv(u.uCol2, toLin(hex(R.color2)));
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -682,6 +808,7 @@ void main(){
     const W = Math.round(opts.width), H = Math.round(opts.height), fps = opts.fps || 25;
     const n = Math.max(1, Math.round(R.duration * fps));
     fs.mkdirSync(dir, { recursive: true });
+    if (R.logo) await loadLogo(R.logo);
     const d = makeDrawer(W, H, R);
     const files = [];
     for (let i = 0; i < n; i++) {
@@ -699,5 +826,6 @@ void main(){
   }
 
   root.GCTextFX = { TEMPLATES, FONTS, DEFAULT, byId, recipeFor, layout, draw2D, Renderer3D, textSdf, makeDrawer, render, is3D, phases, register,
+    loadLogo, logoReady,
     util: { E, clamp, mix, fontCss, paint, glyph, layout } };
 })(typeof window !== "undefined" ? window : globalThis);

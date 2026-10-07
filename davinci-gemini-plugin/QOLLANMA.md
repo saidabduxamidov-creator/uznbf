@@ -49,10 +49,8 @@ Kadr olinmasa ham tayyor uslublar qo'llanadi (avto balanssiz).
 
 ## Matn animatsiyalari va 3D Liquid
 Premiere versiyasidagi bilan bir xil: 12 ta 2D shablon, 11 ta fonli matn (shaffof shisha, 3D chat pufagi va
-boshqalar, matnsiz rejim bilan), 11 ta 3D, 6 ta to'y/zal shabloni va 10 ta matnsiz fon (bokeh, oltin
-zarrachalar, oltin ramka, gulbarglar...). Plagin kadrlarni shaffof PNG qilib chizadi, Media Pool → GeminiCut → Matn ga
-import qiladi va videodan yuqoridagi bo'sh trekka qo'yadi. **Playhead'dagi matnni tahrirlash** →
-o'zgartiring → **Yangilash**.
+boshqalar, matnsiz rejim bilan), 12 ta Gym shabloni va 3D bo'limi: FitCity logolari (asl rang va shaklda 3D),
+o'z logongizni yuklash va 11 ta 3D matn.
 
 ## Boshqa kompyuterga berish
 - Faqat `GeminiCut-Resolve-Setup.bat` faylini yuboring. Kerak: **DaVinci Resolve Studio 20+** (bepul

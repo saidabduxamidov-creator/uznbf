@@ -1,4 +1,4 @@
-# GeminiCut 4.4 — After Effects uchun
+# GeminiCut 4.5 — After Effects uchun
 
 After Effects 2022 – 2026 (**2025** ham), Windows. Qo'shimcha dastur (Node.js, npm, Python) o'rnatish **shart emas**.
 
@@ -27,7 +27,7 @@ Interfeys Premiere versiyasi bilan bir xil, faqat After Effects tilida:
 | Zoom / motion / Claude / ChatGPT | Scale, Position, Rotation, Opacity keyframe'lari (kompozitsiya vaqtida) |
 | Pauzalarni kesish | Barcha qulflanmagan qatlamlar bo'laklarga bo'linadi, chapga suriladi, kompozitsiya qisqaradi |
 | SFX | Audio qatlam, Project panelida "GeminiCut SFX" papkasi |
-| Animatsion matn / 3D / fonlar | PNG ketma-ketligi eng yuqori qatlam bo'lib ("GeminiCut Matn" papkasi) |
+| Animatsion matn / Gym / 3D logo | PNG ketma-ketligi eng yuqori qatlam bo'lib ("GeminiCut Matn" papkasi) |
 | Video AI (Veo / Flow) | Yangi qatlam, audiosi o'chiq |
 | Rang berish (ChatGPT) | Faqat DaVinci Resolve versiyasida |
 

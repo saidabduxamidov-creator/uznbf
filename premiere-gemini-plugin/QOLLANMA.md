@@ -1,4 +1,4 @@
-# GeminiCut 4.3 — Premiere Pro uchun AI ish maydoni
+# GeminiCut 4.5 — Premiere Pro uchun AI ish maydoni
 
 Premiere Pro 2022, 2023, 2024, **2025** va 2026 (Windows). Qo'shimcha dastur (Node.js, npm,
 Playwright va hokazo) o'rnatish **shart emas** — hammasi bitta `GeminiCut-Setup.bat` ichida.
@@ -34,10 +34,11 @@ vaqtlar to'lqin shakli bo'yicha aniqlashtiriladi. **Matn uslubi** kartasi:
 - Kartani bosing — tinglaysiz; **+** yoki ikki marta bosish — playhead joyiga qo'yiladi.
   **Avto** trek: nutq treklaridan tashqaridagi bo'sh audio trek, bo'lmasa yangi trek yaratiladi.
 - **+** tugmasi — yangi papka; **⬆** — kompyuterdan yuklash (WAV, MP3, M4A, AIFF, OGG, FLAC).
-- 96 ta bazaviy effekt: whoosh, riser, impact, glitch, UI, pop, typing, magic, **Cinematic** (braam, trailer hit,
-  reverse cymbal, drone), **To'y** (qo'ng'iroqlar, arfa, qarsaklar, piano, musiqa qutisi), **Ijtimoiy tarmoq**,
+- 98 ta bazaviy effekt: whoosh, riser, impact, glitch, UI, pop, typing, magic, **Cinematic** (braam, trailer hit,
+  reverse cymbal, drone), **Ijtimoiy tarmoq**,
   **O'yin (8-bit)**, **Kulgili** (ba-dum-tss, trombon, plastinka), **Baraban**, **Tabiat** (shamol, yomg'ir,
-  momaqaldiroq, olov), **Foley**. Birinchi
+  momaqaldiroq, olov), **Foley**, **Gym** (shtanga tushishi, gantel, trener hushtagi, boks qo'ng'irog'i,
+  taymer 3-2-1, musht zarbasi, 808 bass, kuch yig'ish). Birinchi
   ochilishda shu kompyuterda sintez qilinadi — mualliflik huquqi muammosi yo'q.
 - Fayllar: `Documents\GeminiCut\Sounds\<papka>`. O'chirish: kartada sichqonchaning o'ng tugmasi.
 
@@ -55,12 +56,14 @@ Timeline'da klipni tanlang va oddiy so'z bilan yozing, masalan: *"yuziga sekin z
   (qisqich bilan), Gradient kapsula, Lenta, 3D karta, Neon ramka, Stiker, Chat xabarlar, Obuna tugmasi,
   Iqtibos, Shisha lower third. **Matnsiz - faqat fon** tugmasi bilan faqat shaffof fonning o'zi chiqadi;
   fon kengligi/balandligi slayderlar bilan sozlanadi.
-- **3D (11 ta):** Suyuq oltin, Suyuq xrom, Jele, Suyuq shisha, Tomchilardan yig'ilish, Lava, 3D Candy,
-  3D Neon, Marmar, Rose gold, Muz — haqiqiy 3D (hajm, yorug'lik, aks) va oqib turadigan sirt.
-- **To'y / Zal (6 ta):** Oltin ismlar, Oltin ramka, Monogramma, Yurakchalar, Xush kelibsiz, Sana kartasi —
-  nafis shriftlar (Gabriola, Segoe Script...), oltin gradient, yaltirash va uchqunlar.
-- **Fonlar (10 ta, matnsiz shaffof overlay):** Bokeh, Oltin zarrachalar, Yurakchalar, Gulbarglar, Konfetti,
-  Light leak, Oltin ramka (zal), Vinyetka, Qor, Sehrli uchqunlar. Zichlik slayderi bilan.
+- **Gym (12 ta)** — sport/fitnes videolari uchun: Zarba (slam), Qizil banner (FitCity uslubi), Ustma-ust
+  so'zlar (NO PAIN / NO GAIN), Sanagich (100 KG, 12 REP), Taymer (haqiqiy vaqtda orqaga sanash), Tezlik
+  chiziqlari, Yurak urishi (EKG), Energiya to'lishi, Strob (Beast mode), Trener lower third, Motivatsiya, Set/progress.
+- **3D · Logo:** FitCity Chimgan, Jurjoniy, Malika, Parlament logolari — **rasm o'zgarmaydi**, aynan o'sha ranglar
+  bilan 3D hajm, yorug'lik, burilib kirish va yaltirash qo'shiladi. **O'z logongiz** — istalgan shaffof PNG logoni
+  yuklab, xuddi shunday 3D qilish mumkin. Chuqurlik, burilish, qirra va o'lcham sozlanadi.
+- **3D matn (11 ta):** Suyuq oltin, Suyuq xrom, Jele, Suyuq shisha, Tomchilardan yig'ilish, Lava, 3D Candy,
+  3D Neon, Marmar, Rose gold, Muz.
 - **Oson sozlash:** matn, shrift, qalinlik, 3 ta rang, o'lcham, soya/kontur/nur; 3D uchun material,
   suyuqlik, oqim tezligi, chuqurlik, burilish, tomchilar; joy (tayyor nuqtalar yoki slayder), davomiylik,
   tezlik. Hammasi jonli oldindan ko'rishda darhol ko'rinadi (**Kadr foni** — videongiz ustida ko'rish).
