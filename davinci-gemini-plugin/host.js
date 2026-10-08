@@ -15,7 +15,7 @@
  */
 "use strict";
 
-const VERSION = "4.6.0";
+const VERSION = "4.6.1";
 const BIN = "GeminiCut";
 
 function pad(n) { return String(n).padStart(2, "0"); }
@@ -207,7 +207,7 @@ function luaPrelude(fps, statusPath) {
 }
 
 function luaEnd(L) {
-  return L.concat(["end)", "c:Unlock()", "finish(ok, err)"]).join("\n");
+  return L.concat(["end)", "c:Unlock()", "finish(ok, err)", "return true"]).join("\n");
 }
 
 const lk = (keys) => "{ " + keys.map(([f, v]) => `{ ${Math.round(f)}, ${Array.isArray(v) ? "{ " + v.map(luaNum).join(", ") + " }" : luaNum(v)} }`).join(", ") + " }";
@@ -498,6 +498,19 @@ function createHost(resolve, deps) {
     return out;
   }
 
+  /*
+   * Comp.Execute: Resolve'ning Workflow Integration ko'prigi ba'zan skript bajarilgandan keyin uning natijasini
+   * o'qiy olmaydi va "Execute: Parse - Unknown object type detected for key:result" xatosini tashlaydi.
+   * Skript esa ishlagan bo'ladi - natija status fayli / tekshiruv orqali aniqlanadi, shuning uchun bu xato e'tiborsiz.
+   */
+  async function fusionRun(comp, lua) {
+    try { return await comp.Execute(lua); }
+    catch (err) {
+      if (/Parse|Unknown object type|key:result/i.test(String((err && err.message) || err))) return null;
+      throw err;
+    }
+  }
+
   async function fusionComp(it) {
     const count = typeof it.GetFusionCompCount === "function" ? await it.GetFusionCompCount() : 0;
     const comp = count > 0 ? await it.GetFusionCompByIndex(1) : await it.AddFusionComp();
@@ -525,7 +538,7 @@ function createHost(resolve, deps) {
     for (const g of groups.values()) {
       try {
         const comp = await fusionComp(g.it);
-        await comp.Execute(buildMotionLua(g.keys));
+        await fusionRun(comp, buildMotionLua(g.keys));
         applied++;
         keys += Object.values(g.keys).reduce((a, k) => a + k.length, 0);
       } catch (err) { errors.push(err.message); }
@@ -743,7 +756,7 @@ function createHost(resolve, deps) {
         const it = await itemAt(e, "video", track + 1, frameAt(e, start) + 1);
         if (!it) continue;
         const count = typeof it.GetFusionCompCount === "function" ? await it.GetFusionCompCount() : 0;
-        if (count > 0) { const comp = await it.GetFusionCompByIndex(1); await comp.Execute(buildResetLua()); }
+        if (count > 0) { const comp = await it.GetFusionCompByIndex(1); await fusionRun(comp, buildResetLua()); }
         reset++;
       }
       return { reset };
@@ -1043,7 +1056,7 @@ function createHost(resolve, deps) {
           const comp = await fusionComp(it);
           const statusFile = path.join(userLutDir(), `status_${id.replace(/[^A-Za-z0-9_-]/g, "_")}.txt`);
           try { fs.mkdirSync(path.dirname(statusFile), { recursive: true }); fs.rmSync(statusFile, { force: true }); } catch (err) { /* e'tiborsiz */ }
-          await comp.Execute(buildGradeLua(file, statusFile));
+          await fusionRun(comp, buildGradeLua(file, statusFile));
           let confirmed = false;
           for (let k = 0; k < 15 && !confirmed; k++) {
             if (fs.existsSync(statusFile)) confirmed = true; else await sleep(100);
@@ -1084,7 +1097,7 @@ function createHost(resolve, deps) {
         if (state.fusionGraded[id] || (typeof it.GetFusionCompCount === "function" && (await it.GetFusionCompCount()) > 0)) {
           try {
             const comp = await it.GetFusionCompByIndex(1);
-            if (comp) { await comp.Execute(buildGradeResetLua()); if (state.fusionGraded[id]) done = true; }
+            if (comp) { await fusionRun(comp, buildGradeResetLua()); if (state.fusionGraded[id]) done = true; }
           } catch (err) { /* e'tiborsiz */ }
           delete state.fusionGraded[id];
         }
@@ -1121,7 +1134,7 @@ function createHost(resolve, deps) {
         const W = Number(spec.W) || Number(await e.tl.GetSetting("timelineResolutionWidth")) || 1920;
         const H = Number(spec.H) || Number(await e.tl.GetSetting("timelineResolutionHeight")) || 1080;
         const comp = await fusionComp(p.item);
-        await comp.Execute(spec.logo ? buildNativeLogoLua(spec, W, H, e.fps, statusFile, spec.img) : buildNativeTextLua(spec, W, H, e.fps, statusFile));
+        await fusionRun(comp, spec.logo ? buildNativeLogoLua(spec, W, H, e.fps, statusFile, spec.img) : buildNativeTextLua(spec, W, H, e.fps, statusFile));
         let txt = "";
         for (let k = 0; k < 20 && !txt; k++) {
           if (fs.existsSync(statusFile)) txt = String(fs.readFileSync(statusFile, "utf8"));
@@ -1129,7 +1142,7 @@ function createHost(resolve, deps) {
         }
         if (/^ok/.test(txt)) return Object.assign(base, { mode: "native", warnings: txt.split(/\r?\n/).slice(1).filter(Boolean) });
         reason = txt ? txt.replace(/^xato:\s*/, "") : "Fusion javob bermadi";
-        await comp.Execute(buildNativeRestoreLua());
+        await fusionRun(comp, buildNativeRestoreLua());
       } catch (err) {
         reason = (err && err.message) || String(err);
       }

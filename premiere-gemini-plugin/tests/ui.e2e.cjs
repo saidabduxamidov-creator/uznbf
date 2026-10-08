@@ -177,7 +177,7 @@ const SHIM = fs.readFileSync(path.join(__dirname, 'browser-shim.js'), 'utf8');
   // Fonli matn: shaffof shisha, matnsiz (faqat fon)
   await page.click('#txKind [data-v="plate"]');
   await page.waitForTimeout(800);
-  check((await page.$$eval('#txGrid .tx-card', (e) => e.length)) === 11, '11 ta fonli shablon (shisha, 3D pufak, ...)');
+  check((await page.$$eval('#txGrid .tx-card', (e) => e.length)) === 17, '17 ta fonli shablon (shisha, 3D pufak, 3D promo bloklar...)');
   await page.click('.tx-card[data-id="plate_bubble3d"]');
   await page.waitForTimeout(600);
   check((await ink()) > 500, '3D chat pufagi chizildi');

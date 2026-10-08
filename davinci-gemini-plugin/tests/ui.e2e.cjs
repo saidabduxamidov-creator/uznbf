@@ -221,6 +221,17 @@ const ELECTRON = `(function () {
   const nat = nt.tracks.video.flat().find((it) => it.comps.some((c) => c.native === 'text'));
   check(!!nat && /GCMatn", "CHIMGAN"/.test(nat.comps[0].scripts[0]) && /Fusion sahifasida/.test(await page.textContent('#txStatus')), 'gym banner Fusion Text+ bilan qo\'yildi: ' + await page.textContent('#txStatus'));
   await shot('r08-matn-native');
+  // 3D promo bloklar: faqat kadrlar (PNG)
+  await page.click('#txKind [data-v="plate"]');
+  await page.waitForTimeout(1200);
+  await page.click('.tx-card[data-id="promo_stack"]');
+  await page.evaluate(() => { const r = window.GCText.recipe(); r.duration = 1; window.GCText.setRecipe(r); });
+  check(/PNG/.test(await page.textContent('#txModeHint')), 'promo bloklar: PNG bo\'lishi aytiladi');
+  await page.waitForTimeout(600);
+  await shot('r09-promo');
+  await page.click('#txInsert');
+  await page.waitForFunction(() => /kadr\)|XATO|topilmadi/i.test(document.getElementById('txStatus').textContent), null, { timeout: 240000 }).catch(() => {});
+  check(/25 kadr/.test(await page.textContent('#txStatus')), 'promo bloklar timeline\'ga (25 kadr): ' + await page.textContent('#txStatus'));
 
   console.log('Subtitr');
   await tab('subs');

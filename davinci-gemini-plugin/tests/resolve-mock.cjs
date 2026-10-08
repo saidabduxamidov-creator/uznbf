@@ -31,6 +31,8 @@ class Comp {
       this.native = currentProject.nativeFail ? null : (/add\("Renderer3D"/.test(s) ? 'logo' : 'text');
       if (st) fs.writeFileSync(JSON.parse('"' + st[1] + '"'), currentProject.nativeFail ? 'xato: TextPlus vositasi qo\'shilmadi' : 'ok\n');
     } else if (/mo\.Input = mi\.Output/.test(s) && /GCMatn/.test(s)) this.native = null;
+    // haqiqiy Resolve ko'prigi: skript bajariladi, lekin natijani o'qiy olmaydi
+    if (currentProject.executeParseError) throw new Error('Execute: Parse - Unknown object type detected for key:result (type:-1)');
     return true;
   }
 }

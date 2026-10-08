@@ -48,7 +48,7 @@ Natijada qaysi usul ishlatilgani yoziladi. LUT fayllari: `%ProgramData%\Blackmag
 Kadr olinmasa ham tayyor uslublar qo'llanadi (avto balanssiz).
 
 ## Matn animatsiyalari va 3D Liquid
-Premiere versiyasidagi bilan bir xil: 12 ta 2D shablon, 11 ta fonli matn (shaffof shisha, 3D chat pufagi va
+Premiere versiyasidagi bilan bir xil: 12 ta 2D shablon, 17 ta fonli matn (shaffof shisha, 3D chat pufagi, rasmdagi kabi 3D promo bloklar va
 boshqalar, matnsiz rejim bilan), 12 ta Gym shabloni va 3D bo'limi: FitCity logolari (asl rang va shaklda 3D),
 o'z logongizni yuklash va 11 ta 3D matn.
 

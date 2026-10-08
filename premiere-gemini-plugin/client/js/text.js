@@ -236,7 +236,8 @@
     if (mode === "png") t = "Kadrlar (PNG): natija oldindan ko'rishdagidek. Matnni o'zgartirish - panelda (klipni tanlab “Tahrirlash”).";
     else if (!T().nativeSupported(R, app)) t = app === "resolve" && T().NATIVE[R.template]
       ? "Bu animatsiya (sanagich/taymer/yozuv) Resolve'da kadrlar (PNG) bo'lib qo'yiladi."
-      : "3D suyuq matn faqat kadrlar (PNG) bo'lib qo'yiladi. Tahrirlanadigan 3D - logolar.";
+      : T().byId(R.template).kind === "3d" ? "3D suyuq matn faqat kadrlar (PNG) bo'lib qo'yiladi. Tahrirlanadigan 3D - logolar."
+        : "Bu shablon (3D bloklar, xrom harflar) kadrlar (PNG) bo'lib qo'yiladi - natija aynan oldindan ko'rishdagidek.";
     else if (app === "ae") t = logo
       ? "AE qatlamlari: Null + 3D nusxalar. Null'dagi “Qalinlik” slayderi - chuqurlik; aylanish, o'lcham, joy - Null'ning Transform'ida."
       : "AE qatlamlari: matnni kompozitsiyada ikki marta bosib o'zgartiring; shrift/rang - Character paneli; fon matn o'lchamiga o'zi moslashadi; animatsiya - oddiy keyframe'lar.";

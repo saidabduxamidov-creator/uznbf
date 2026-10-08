@@ -52,10 +52,14 @@ Timeline'da klipni tanlang va oddiy so'z bilan yozing, masalan: *"yuziga sekin z
 ### Matn (animatsion matnlar va 3D Liquid)
 - **2D shablonlar (12 ta):** Pop, Pastdan chiqish, Yozuv mashinkasi, Blur, Kinetik zoom (Reels), To'lqin,
   Marker, Neon, Glitch, Yaltiroq gradient, Ikkiga ochilish, Lower third (ism + lavozim).
-- **Fonli matnlar (11 ta)** — matn orqasiga fon o'zi qo'yiladi: Shaffof shisha (frosted), 3D chat pufagi
+- **Fonli matnlar (17 ta)** — matn orqasiga fon o'zi qo'yiladi: Shaffof shisha (frosted), 3D chat pufagi
   (qisqich bilan), Gradient kapsula, Lenta, 3D karta, Neon ramka, Stiker, Chat xabarlar, Obuna tugmasi,
   Iqtibos, Shisha lower third. **Matnsiz - faqat fon** tugmasi bilan faqat shaffof fonning o'zi chiqadi;
   fon kengligi/balandligi slayderlar bilan sozlanadi.
+- **3D promo bloklar (6 ta)** — har bir qator o'z 3D blokida, xrom yoki oltin qalin harflar bilan:
+  Promo 3D bloklar (qizil yaltiroq + karbon + mo'yqalam), Oltin promo, Ko'k promo, Mo'yqalam chizig'i,
+  3D yaltiroq yorliq, Karbon premium. Matnni qatorlarga bo'lib yozing (Enter) — har qator alohida blok;
+  blok rangi - **Aksent** rangi. Bloklar navbat bilan urilib tushadi, harflar ustidan nur o'tadi.
 - **Gym (12 ta)** — sport/fitnes videolari uchun: Zarba (slam), Qizil banner (FitCity uslubi), Ustma-ust
   so'zlar (NO PAIN / NO GAIN), Sanagich (100 KG, 12 REP), Taymer (haqiqiy vaqtda orqaga sanash), Tezlik
   chiziqlari, Yurak urishi (EKG), Energiya to'lishi, Strob (Beast mode), Trener lower third, Motivatsiya, Set/progress.

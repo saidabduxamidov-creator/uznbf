@@ -428,9 +428,196 @@
     subLine(ctx, R, L, row.x, row.y + L.lh * 0.85, E.outCubic(P.inP(P.inD * 0.55, P.inD * 0.7)) * (1 - o), { align: "left", upper: false, spacing: 0.02, scale: 0.6, font: R.font, fill: R.color2, shadow: 0.3 });
   };
 
+  /* ================= PROMO: 3D bloklar ustida xrom matn ================= *
+   * Har bir qator o'z blokida: yaltiroq rangli plashka, karbon plashka yoki mo'yqalam chizig'i.
+   * Matn - qalinligi bor xrom/oltin harflar, bloklar navbat bilan "urilib" tushadi, ustidan nur o'tadi.
+   */
+  const METAL = {
+    silver: [[0, "#ffffff"], [0.3, "#e3e7ec"], [0.49, "#8f959e"], [0.55, "#f6f8fa"], [0.78, "#c2c7ce"], [1, "#6c717a"]],
+    gold: [[0, "#fff8d2"], [0.3, "#f7d46c"], [0.49, "#a3701b"], [0.55, "#ffe9a4"], [0.8, "#d39c33"], [1, "#77510f"]],
+  };
+
+  let carbonTile = null;
+  function carbonFill(ctx, cell) {
+    try {
+      if (!carbonTile) {
+        const c = root.document.createElement("canvas"); c.width = c.height = 16;
+        const g = c.getContext("2d");
+        g.fillStyle = "#070708"; g.fillRect(0, 0, 16, 16);
+        [[0, 0, 1], [8, 0, 0], [0, 8, 0], [8, 8, 1]].forEach(([x, y, hz]) => {
+          const gr = hz ? g.createLinearGradient(x, y, x, y + 8) : g.createLinearGradient(x, y, x + 8, y);
+          gr.addColorStop(0, "#34363b"); gr.addColorStop(0.5, "#17181b"); gr.addColorStop(1, "#050506");
+          g.fillStyle = gr; g.fillRect(x + 0.5, y + 0.5, 7, 7);
+        });
+        carbonTile = c;
+      }
+      const pt = ctx.createPattern(carbonTile, "repeat");
+      if (pt && pt.setTransform && root.DOMMatrix) pt.setTransform(new root.DOMMatrix().rotateSelf(0, 0, 45).scaleSelf(Math.max(0.2, cell / 16)));
+      return pt || "#111";
+    } catch (e) { return "#111"; }
+  }
+
+  function glossPlate(ctx, x, y, w, h, col) {
+    const r = h * 0.3, d = h * 0.09;
+    rr(ctx, x, y + d, w, h, r); ctx.fillStyle = shade(col, 0.3); ctx.fill();
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, shade(col, 1.4)); g.addColorStop(0.42, col); g.addColorStop(1, shade(col, 0.5));
+    rr(ctx, x, y, w, h, r); ctx.fillStyle = g; ctx.fill();
+    const gg = ctx.createLinearGradient(0, y, 0, y + h * 0.5);
+    gg.addColorStop(0, "rgba(255,255,255,0.55)"); gg.addColorStop(1, "rgba(255,255,255,0)");
+    rr(ctx, x + h * 0.09, y + h * 0.07, w - h * 0.18, h * 0.4, r * 0.75); ctx.fillStyle = gg; ctx.fill();
+    rr(ctx, x, y, w, h, r); ctx.lineWidth = Math.max(1, h * 0.055); ctx.strokeStyle = shade(col, 1.65); ctx.stroke();
+    rr(ctx, x + h * 0.06, y + h * 0.06, w - h * 0.12, h * 0.88, r * 0.82); ctx.lineWidth = Math.max(1, h * 0.022); ctx.strokeStyle = shade(col, 0.42); ctx.stroke();
+  }
+
+  function carbonPlate(ctx, x, y, w, h, edge) {
+    const r = h * 0.3, d = h * 0.09;
+    rr(ctx, x, y + d, w, h, r); ctx.fillStyle = "#040405"; ctx.fill();
+    rr(ctx, x, y, w, h, r); ctx.fillStyle = carbonFill(ctx, h * 0.09); ctx.fill();
+    const sh = ctx.createLinearGradient(0, y, 0, y + h);
+    sh.addColorStop(0, "rgba(255,255,255,0.22)"); sh.addColorStop(0.45, "rgba(255,255,255,0.03)"); sh.addColorStop(1, "rgba(0,0,0,0.45)");
+    rr(ctx, x, y, w, h, r); ctx.fillStyle = sh; ctx.fill();
+    const rim = ctx.createLinearGradient(0, y, 0, y + h);
+    METAL.silver.forEach(([o, c]) => rim.addColorStop(o, c));
+    rr(ctx, x, y, w, h, r); ctx.lineWidth = Math.max(1.5, h * 0.07); ctx.strokeStyle = rim; ctx.stroke();
+    rr(ctx, x - h * 0.04, y - h * 0.04, w + h * 0.08, h * 1.08, r * 1.1); ctx.lineWidth = Math.max(1, h * 0.025); ctx.strokeStyle = edge; ctx.stroke();
+  }
+
+  function brushPlate(ctx, x, y, w, h, col, seed) {
+    const n = 22, path = () => {
+      ctx.beginPath();
+      ctx.moveTo(x + w * 0.05, y + h * 0.1);
+      for (let i = 1; i <= n; i++) ctx.lineTo(x + w * (0.05 + 0.9 * i / n), y + h * (0.03 + 0.12 * hash(seed, i)));
+      for (let i = 0; i <= 16; i++) { const len = w * (0.015 + 0.075 * hash(seed + 1, i)); ctx.lineTo(x + w * 0.95 + (i % 2 ? len : len * 0.25), y + h * (0.08 + 0.84 * i / 16)); }
+      for (let i = n; i >= 0; i--) ctx.lineTo(x + w * (0.05 + 0.9 * i / n), y + h * (0.88 + 0.1 * hash(seed + 2, i)));
+      for (let i = 16; i >= 0; i--) { const len = w * (0.015 + 0.09 * hash(seed + 3, i)); ctx.lineTo(x + w * 0.05 - (i % 2 ? len : len * 0.25), y + h * (0.08 + 0.84 * i / 16)); }
+      ctx.closePath();
+    };
+    ctx.save(); ctx.translate(0, h * 0.08); path(); ctx.fillStyle = shade(col, 0.3); ctx.fill(); ctx.restore();
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, shade(col, 1.25)); g.addColorStop(0.5, col); g.addColorStop(1, shade(col, 0.6));
+    path(); ctx.fillStyle = g; ctx.fill();
+    ctx.save(); path(); ctx.clip(); // mo'yqalam izlari
+    for (let i = 0; i < 26; i++) {
+      const yy = y + h * hash(seed + 4, i), a = 0.08 + 0.18 * hash(seed + 5, i);
+      ctx.fillStyle = i % 3 ? `rgba(0,0,0,${a.toFixed(3)})` : `rgba(255,255,255,${(a * 0.8).toFixed(3)})`;
+      ctx.fillRect(x - w * 0.1 + w * 0.3 * hash(seed + 6, i), yy, w * (0.5 + 0.7 * hash(seed + 7, i)), Math.max(1, h * 0.012));
+    }
+    ctx.restore();
+  }
+
+  function metalText(ctx, s, cx, cy, fs, R, metal, edge) {
+    ctx.save();
+    ctx.font = fontCss(R, fs); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+    try { if ("letterSpacing" in ctx) ctx.letterSpacing = (R.spacing * fs).toFixed(1) + "px"; } catch (e) { /* eski Chromium */ }
+    const d = fs * 0.075, steps = 8; // qalinlik
+    for (let i = steps; i >= 1; i--) { ctx.fillStyle = i === steps ? "rgba(0,0,0,0.4)" : shade(edge, 0.18 + 0.2 * i / steps); ctx.fillText(s, cx + d * 0.3 * i / steps, cy + d * i / steps); }
+    ctx.lineWidth = fs * 0.1; ctx.strokeStyle = shade(edge, 0.5); ctx.strokeText(s, cx, cy);
+    ctx.lineWidth = fs * 0.04; ctx.strokeStyle = shade(edge, 1.15); ctx.strokeText(s, cx, cy);
+    const g = ctx.createLinearGradient(0, cy - fs * 0.4, 0, cy + fs * 0.4);
+    METAL[metal].forEach(([o, c]) => g.addColorStop(o, c));
+    ctx.fillStyle = g; ctx.fillText(s, cx, cy);
+    ctx.restore();
+  }
+
+  /* Harflar ustidan o'tadigan yorug'lik chizig'i (faqat harflar ichida) */
+  function shineText(ctx, s, cx, cy, fs, R, bx) {
+    ctx.save();
+    ctx.font = fontCss(R, fs); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    try { if ("letterSpacing" in ctx) ctx.letterSpacing = (R.spacing * fs).toFixed(1) + "px"; } catch (e) { /* eski Chromium */ }
+    const g = ctx.createLinearGradient(bx - fs * 0.7, cy - fs * 0.5, bx + fs * 0.7, cy + fs * 0.5);
+    g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,255,0.85)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g; ctx.fillText(s, cx, cy);
+    ctx.restore();
+  }
+
+  function flare(ctx, x, y, s, a) {
+    if (a <= 0.01) return;
+    ctx.save(); ctx.globalAlpha *= a; ctx.globalCompositeOperation = "lighter";
+    const g = ctx.createRadialGradient(x, y, 0, x, y, s);
+    g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.18, "rgba(255,225,225,0.6)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, s, 0, TAU); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillRect(x - s * 1.7, y - s * 0.025, s * 3.4, s * 0.05); ctx.fillRect(x - s * 0.025, y - s * 0.9, s * 0.05, s * 1.8);
+    ctx.restore();
+  }
+
+  const PRIORITY = { brush: 0, gloss: 1, carbon: 2 };
+  function promo(cfg) {
+    return function (ctx, L, R, P, W, H) {
+      const rows = L.rows.map((r) => r.text);
+      const n = rows.length;
+      const style = (i) => cfg.styles[i % cfg.styles.length];
+      const scl = rows.map((_, i) => (n === 1 ? 1 : cfg.scales[i % cfg.scales.length]));
+      const padX = 0.32 * (R.padX || 1), padY = R.padY || 1;
+      let base = L.size;
+      const widths = (b) => rows.map((s, i) => {
+        const fs = b * scl[i];
+        ctx.font = fontCss(R, fs);
+        const tw = ctx.measureText(s).width + Math.max(0, s.length - 1) * R.spacing * fs;
+        return { fs, tw, pw: tw + fs * padX * 2 + (style(i) === "brush" ? fs * 0.8 : 0), ph: fs * (0.84 + 0.28 * padY) };
+      });
+      let M = widths(base);
+      const maxW = Math.max(...M.map((m) => m.pw));
+      if (maxW > W * 0.94) { base *= (W * 0.94) / maxW; M = widths(base); }
+      const gap = -base * 0.06;
+      const total = M.reduce((a, m) => a + m.ph, 0) + gap * (n - 1);
+      const cx = R.x * W, cy = R.y * H;
+      let yy = cy - total / 2;
+      M.forEach((m) => { m.y = yy; yy += m.ph + gap; });
+      const o = E.inCubic(P.out);
+      ctx.save();
+      popTransform(ctx, cx, cy, 1 - 0.15 * o, cfg.tilt);
+      ctx.globalAlpha *= 1 - o;
+      const order = rows.map((_, i) => i).sort((a, b) => PRIORITY[style(a)] - PRIORITY[style(b)] || a - b);
+      order.forEach((i) => {
+        const m = M[i], delay = i * P.inD * 0.3;
+        const k = P.inP(delay, P.inD * 0.55);
+        if (k <= 0) return;
+        const s = mix(2.1, 1, E.outBack(k)), a = Math.min(1, k * 3);
+        const fy = Math.sin(P.t * 2.2 + i * 1.3) * m.fs * 0.018;
+        const pcx = cx, pcy = m.y + m.ph / 2 + fy;
+        const x = pcx - m.pw / 2, y = pcy - m.ph / 2;
+        ctx.save();
+        ctx.globalAlpha *= a;
+        popTransform(ctx, pcx, pcy, s, (1 - E.outCubic(k)) * (i % 2 ? 0.12 : -0.12));
+        if (R.shadow > 0) {
+          ctx.save(); ctx.shadowColor = `rgba(0,0,0,${(0.3 + 0.35 * R.shadow).toFixed(2)})`; ctx.shadowBlur = m.fs * 0.6; ctx.shadowOffsetY = m.fs * 0.18;
+          rr(ctx, x + m.fs * 0.1, y + m.ph * 0.15, m.pw - m.fs * 0.2, m.ph * 0.8, m.ph * 0.3); ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fill(); ctx.restore();
+        }
+        if (style(i) === "gloss") glossPlate(ctx, x, y, m.pw, m.ph, R.accent);
+        else if (style(i) === "carbon") carbonPlate(ctx, x, y, m.pw, m.ph, R.accent);
+        else brushPlate(ctx, x, y, m.pw, m.ph, R.accent, 7 + i * 13);
+        if (!R.noText) {
+          const tk = E.outBack(P.inP(delay + P.inD * 0.15, P.inD * 0.5));
+          ctx.save(); ctx.globalAlpha *= Math.min(1, tk * 2); popTransform(ctx, pcx, pcy, mix(0.55, 1, tk));
+          const ty = pcy + m.fs * 0.02 - m.fs * 0.035;
+          metalText(ctx, rows[i], pcx, ty, m.fs, R, cfg.metal, cfg.edge || R.accent);
+          const u = ((P.t - P.inD) * 0.65 - i * 0.12) % 1.7;
+          if (P.t > P.inD && u >= 0 && u < 1) shineText(ctx, rows[i], pcx, ty, m.fs, R, x - m.fs + (m.pw + m.fs * 2) * u);
+          ctx.restore();
+        }
+        const fa = E.outCubic(P.inP(delay + P.inD * 0.4, P.inD * 0.4)) * (0.55 + 0.45 * Math.sin(P.t * 3.1 + i * 2));
+        flare(ctx, x + m.pw - m.ph * 0.35, y + m.ph * 0.12, m.fs * 0.32, fa);
+        if (i === 0) flare(ctx, x + m.ph * 0.4, y + m.ph * 0.9, m.fs * 0.22, fa * 0.8);
+        ctx.restore();
+      });
+      ctx.restore();
+    };
+  }
+
+  DRAW.promo_stack = promo({ styles: ["gloss", "carbon", "brush"], scales: [1, 1.2, 0.8], metal: "silver", tilt: -0.06 });
+  DRAW.promo_gold = promo({ styles: ["carbon", "gloss", "brush"], scales: [0.85, 1.2, 0.78], metal: "gold", edge: "#4a2b00", tilt: -0.05 });
+  DRAW.promo_blue = promo({ styles: ["gloss", "carbon", "brush"], scales: [0.9, 1.2, 0.8], metal: "silver", tilt: 0.05 });
+  DRAW.promo_brush = promo({ styles: ["brush"], scales: [1, 0.8], metal: "silver", tilt: -0.04 });
+  DRAW.promo_badge = promo({ styles: ["gloss"], scales: [1, 0.8], metal: "silver", tilt: -0.05 });
+  DRAW.promo_carbon = promo({ styles: ["carbon"], scales: [1, 0.8], metal: "gold", edge: "#4a2b00", tilt: 0 });
+
   /* ================= katalog ================= */
 
   const PLATE = { font: "Segoe UI", weight: 800, upper: false, size: 0.055, shadow: 0.35, stroke: 0, glow: 0 };
+  const PROMO = { font: "Arial Black", weight: 900, italic: true, upper: false, size: 0.13, spacing: 0, shadow: 0.6, stroke: 0, glow: 0,
+    color: "#ffffff", color2: "#111111", accent: "#e10600", duration: 3.5 };
   const T = (id, kind, name, desc, set, extra) => Object.assign({ id, kind, name, desc, set }, extra || {});
 
   const LIST = [
@@ -449,6 +636,13 @@
       Object.assign({}, PLATE, { text: "Orzular amalga oshadi", sub: "— Muallif", font: "Georgia", weight: 700, color: "#ffffff", accent: "#ffd34d", color2: "#d0d3db" }), { sub: true }),
     T("plate_lowerglass", "plate", "Shisha lower third", "Ism va lavozim shisha plashkada",
       Object.assign({}, PLATE, { text: "Dilshod Rahimov", sub: "Bosh muharrir", weight: 700, color: "#ffffff", color2: "#e2e6ee", accent: "#7b6cff", size: 0.045, x: 0.1, y: 0.8, align: "left" }), { sub: true, oneLine: true }),
+    // 3D promo bloklar (rasmdagi kabi: rangli plashka, karbon plashka, mo'yqalam chizig'i)
+    T("promo_stack", "plate", "Promo 3D bloklar", "Har qator o'z 3D blokida: qizil, karbon, mo'yqalam; xrom harflar", Object.assign({}, PROMO, { text: "2000 kv\nZALNI\n20 SONIYADA" }), { manyLines: true }),
+    T("promo_gold", "plate", "Oltin promo", "Oltin harflar, karbon va qizil bloklar", Object.assign({}, PROMO, { text: "CHEGIRMA\n-50%\nFAQAT BUGUN", accent: "#c8102e" }), { manyLines: true }),
+    T("promo_blue", "plate", "Ko'k promo", "Ko'k yaltiroq blok, karbon, mo'yqalam", Object.assign({}, PROMO, { text: "YANGI\nMAVSUM\nBOSHLANDI", accent: "#1667ff" }), { manyLines: true }),
+    T("promo_brush", "plate", "Mo'yqalam chizig'i", "Xrom matn qizil mo'yqalam chizig'i ustida", Object.assign({}, PROMO, { text: "20 SONIYADA", size: 0.11 }), { manyLines: true }),
+    T("promo_badge", "plate", "3D yaltiroq yorliq", "Qalin xrom matn yaltiroq 3D plashkada", Object.assign({}, PROMO, { text: "MEGA AKSIYA", accent: "#ff7a00", size: 0.11 }), { manyLines: true }),
+    T("promo_carbon", "plate", "Karbon premium", "Karbon plashka, xrom ramka, oltin harflar", Object.assign({}, PROMO, { text: "PREMIUM", size: 0.12 }), { manyLines: true }),
   ];
 
   X.register(LIST, DRAW);

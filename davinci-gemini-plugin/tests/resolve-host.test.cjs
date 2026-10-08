@@ -231,6 +231,12 @@ test('tahrirlanadigan matn: PNG zaxira klipiga Fusion (Text+ / 3D logo) qo\'shil
   r = await host.gc_insertNative(logo, path.join(dir, 'gc_0000.png'), 50, 25, 3, null, 'Logo');
   assert.strictEqual(r.mode, 'native', r.reason);
   assert.strictEqual(tl.tracks.video[1].find((x) => x.start === START + 3 * FPS).comps[0].native, 'logo');
+  // Resolve ko'prigi "Execute: Parse - Unknown object type ... key:result" xatosini bersa ham skript ishlagan - native
+  env.project.executeParseError = true;
+  r = await host.gc_insertNative(spec, path.join(dir, 'gc_0000.png'), 50, 25, 6, null, 'Matn P');
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(r.mode, 'native', r.reason);
+  env.project.executeParseError = false;
   // Fusion xatosi -> PNG klip o'z holicha (MediaIn1 qayta ulanadi), sababi qaytadi
   env.project.nativeFail = true;
   r = await host.gc_insertNative(spec, path.join(dir, 'gc_0000.png'), 50, 25, 12, null, 'Matn 3');

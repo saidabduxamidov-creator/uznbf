@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ExtensionManifest Version="7.0" ExtensionBundleId="com.uzstudio.geminicut.ae"
-    ExtensionBundleVersion="4.6.0" ExtensionBundleName="GeminiCut"
+    ExtensionBundleVersion="4.6.1" ExtensionBundleName="GeminiCut"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
-    <Extension Id="com.uzstudio.geminicut.ae.panel" Version="4.6.0" />
+    <Extension Id="com.uzstudio.geminicut.ae.panel" Version="4.6.1" />
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
