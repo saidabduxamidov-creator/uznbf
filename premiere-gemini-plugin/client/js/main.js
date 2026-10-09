@@ -129,7 +129,6 @@
 
   function setBusy(on) {
     state.busy = on;
-    const flow = document.getElementById("flowGenerate"); if (flow) flow.disabled = on;
     ["btnSubs", "btnEdit", "btnApplySubs", "btnApplyEdit", "refreshSeq"].forEach((id) => { $(id).disabled = on; });
     document.querySelectorAll(".chip").forEach((c) => { c.disabled = on; });
   }
@@ -1034,10 +1033,9 @@ ${lines}`;
     ta.remove();
   }
 
-  /* Boshqa modullar (Effektlar, Claude, Flow, Bloknot) uchun umumiy interfeys */
+  /* Boshqa modullar (Effektlar, Claude, ChatGPT, Matn, Bloknot) uchun umumiy interfeys */
   window.GCApplication = {
     isBusy: () => state.busy,
-    lockFlow: (on) => { setBusy(on); },
     settings: () => state.settings,
     sequence: () => state.seq,
     speechTracks: () => state.tracks.slice(),
@@ -1050,7 +1048,7 @@ ${lines}`;
     copyText,
   };
   init();
-  ["GCLibrary", "GCNotes", "GCClaude", "GCChatGPT", "GCText", "GCFlow"].forEach((m) => {
+  ["GCLibrary", "GCNotes", "GCClaude", "GCChatGPT", "GCText"].forEach((m) => {
     try { if (window[m]) window[m].init(); } catch (e) { log(m + " ishga tushmadi: " + e.message); }
   });
   document.querySelectorAll('.tab').forEach(t => t.addEventListener('keydown', e => {

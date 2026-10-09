@@ -12,7 +12,7 @@
  * Barcha vaqtlar - kompozitsiya soniyalarida.
  */
 
-var GC_VERSION = "4.6.1";
+var GC_VERSION = "4.7.0";
 var GC_LAST_COMP_ID = 0;
 
 /* ======================= yordamchilar ======================= */
@@ -621,32 +621,6 @@ function gc_exportFrames(base, times) {
     } catch (e) {
         return gc_fail("Kadr eksporti: " + (e.message || e.toString()));
     }
-}
-
-function gc_flowCapture(frameBase) {
-    try {
-        var comp = gc_comp();
-        var f = gc_savePng(comp, comp.time, frameBase + ".png");
-        if (!f) return gc_fail("Kadr saqlanmadi.");
-        return gc_ok({ sequenceID: String(comp.id), sequenceName: comp.name, projectPath: app.project.file ? app.project.file.fsName : "",
-            ticks: String(comp.time), seconds: comp.time, frame: f, width: comp.width, height: comp.height });
-    } catch (e) { return gc_fail("Kadr eksporti: " + (e.message || e.toString())); }
-}
-
-function gc_flowImport(filePath, sequenceID, ticks, projectPath, useCurrent) {
-    try {
-        var comp = null;
-        try { comp = app.project.itemByID(Number(sequenceID)); } catch (eC) {}
-        if (!comp || !(comp instanceof CompItem)) return gc_fail("Kadr olingan kompozitsiya topilmadi. Video Project panelida saqlandi.");
-        GC_LAST_COMP_ID = comp.id;
-        return gc_undo("GeminiCut: AI video", function () {
-            var item = gc_importOnce(filePath, "GeminiCut AI Video");
-            var L = comp.layers.add(item);
-            L.startTime = useCurrent ? comp.time : Number(ticks) || 0;
-            try { if (L.hasAudio) L.audioEnabled = false; } catch (eA) {}
-            return gc_ok({ track: L.index - 1, seconds: L.startTime, name: item.name });
-        });
-    } catch (e) { return gc_fail("Import: " + (e.message || e.toString())); }
 }
 
 /* ======================= animatsion matn (PNG ketma-ketligi) ======================= */

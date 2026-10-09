@@ -40,7 +40,7 @@ function runScript(script) {
   const paths = [];
   script = script.replace(/"([A-Za-z]:\/[^"]*)"/g, (m, p) => { paths.push(p); return JSON.stringify(toReal(p)); });
   paths.forEach((p) => fs.mkdirSync(path.dirname(toReal(p)), { recursive: true }));
-  if (/^gc_(insertSound|importSrt|flowImport)/.test(script) && paths[0]) fs.writeFileSync(toReal(paths[0]), 'x');
+  if (/^gc_(insertSound|importSrt)/.test(script) && paths[0]) fs.writeFileSync(toReal(paths[0]), 'x');
   if (/^gc_importSrt/.test(script)) fs.writeFileSync(toReal(paths[0]), global.__lastSrt || '');
   const seqm = /^gc_importSequence\("[^"]*",(\d+),/.exec(script);
   if (seqm) { const d = path.dirname(toReal(paths[0])); for (let i = 0; i < Number(seqm[1]); i++) fs.writeFileSync(path.join(d, 'gc_' + String(i).padStart(4, '0') + '.png'), 'x'); }

@@ -43,7 +43,7 @@ async function hostCall(fn, args) {
   const mapped = JSON.parse(JSON.stringify(args || []), (k, v) => (typeof v === 'string' && /^[A-Za-z]:\//.test(v) ? toReal(v) : v));
   const walk = (v) => (Array.isArray(v) ? v.forEach(walk) : typeof v === 'string' && v.startsWith(REAL) && fs.mkdirSync(path.dirname(v), { recursive: true }));
   walk(mapped);
-  if (/^gc_(insertSound|importSrt|flowImport)$/.test(fn)) fs.writeFileSync(mapped[0], 'x');
+  if (/^gc_(insertSound|importSrt)$/.test(fn)) fs.writeFileSync(mapped[0], 'x');
   if (fn === 'gc_importSequence') { const d = path.dirname(mapped[0]); for (let i = 0; i < mapped[1]; i++) fs.writeFileSync(path.join(d, 'gc_' + String(i).padStart(4, '0') + '.png'), 'x'); }
   if (fn === 'gc_insertNative') { const d = path.dirname(mapped[1]); for (let i = 0; i < mapped[2]; i++) fs.writeFileSync(path.join(d, 'gc_' + String(i).padStart(4, '0') + '.png'), 'x'); }
   return fromReal(await host[fn](...mapped));

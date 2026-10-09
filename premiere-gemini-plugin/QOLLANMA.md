@@ -87,18 +87,6 @@ Claude bo'limi kabi: klipni tanlang va so'z bilan yozing — ChatGPT kadrlarni k
 kesishlarni rejalashtiradi. Model avtomatik (kalitingizga ochiq eng yangi GPT) yoki Sozlamalarda tanlanadi.
 Rang berish (color grading) — DaVinci Resolve versiyasida.
 
-### Video AI (kadrdan video)
-- **Veo · avtomatik** — rasmiy Gemini API orqali: kadr + prompt → MP4 → yangi video trek.
-  Gemini kalitingiz ishlatiladi (Veo pullik, AI Studio'da billing kerak).
-- **Google Flow · brauzer** (<https://flow.google.com>) — o'zingizning Flow akkauntingiz/kreditlaringiz:
-  1. **flow.google.com ni ochish / akkauntni ulash** — alohida GeminiCut brauzer oynasida
-     flow.google.com ochiladi. Kirilmagan bo'lsa Google kirish sahifasi chiqadi: bir marta kirasiz,
-     plagin buni o'zi sezadi va Flow'ga qaytaradi. Profil eslab qoladi (asosiy Chrome profilingizga
-     tegilmaydi, parol plaginga kiritilmaydi).
-  2. Flow'da "Frames to Video" ni tanlang, playhead'ni kadrga qo'ying, promptni yozing, **Flow'ga yuborish**.
-  3. Plagin kadrni yuklaydi va promptni yozadi; Generate'ni siz bosasiz (yoki avtomatik bosish yoqiladi).
-  4. Video tayyor bo'lgach Flow'da **Download** — plagin MP4'ni ushlab timeline'ga qo'yadi.
-
 ### Bloknot
 Bir nechta qayd (`Documents\GeminiCut\Notes`), avtomatik saqlash, so'z/o'qish vaqti hisoblagichi.
 **AI yozuvchi:** senariy yozish, davom ettirish, qisqartirish, imloni tuzatish, YouTube sarlavha/tavsif/teglar,
@@ -110,9 +98,6 @@ erkin topshiriq. **Videodagi nutq** — subtitr matnini qaydga qo'shadi.
 |---|---|
 | Zoom/motion ko'rinmayapti | Sozlamalar → **Keyframe vaqti** → "Klip boshidan" ni tanlab qayta sinang |
 | "WAV eksport preseti topilmadi" | Export → Format: Waveform Audio → Save Preset → Sozlamalarda tanlang |
-| Flow: "Chrome yoki Edge topilmadi" | Google Chrome yoki Microsoft Edge o'rnating |
-| Flow: rasm yuklash maydoni topilmadi | Flow'da "Frames to Video" rejimini tanlab, birinchi kadr (+) tugmasini bosing |
-| Veo modellari yo'q | AI Studio'da billing yoqing yoki Google Flow usulidan foydalaning |
 | Claude: kalit noto'g'ri / kredit yo'q | console.anthropic.com da kalit va balansni tekshiring |
 | ChatGPT: "mablag' yo'q (insufficient_quota)" | platform.openai.com → Billing da hisobni to'ldiring |
 | 3D matn: "WebGL ishlamayapti" | Videokarta drayverini yangilang; 2D shablonlar baribir ishlaydi |
@@ -132,10 +117,10 @@ Batafsil: **Sozlamalar → Jurnal**.
 ## Dasturchilar uchun
 
 ```
-client/js/  cep.js (Premiere aloqa) · audio.js (VAD) · subtitles.js · gemini.js (Gemini + Veo)
+client/js/  cep.js (Premiere aloqa) · audio.js (VAD) · subtitles.js · gemini.js (Gemini API)
             ai.js (Claude HTTPS + umumiy matn AI) · motion.js (easing, presetlar) · sfxgen.js
             library.js (effektlar) · notes.js · claude.js (Claude/ChatGPT montajchi) · chatgpt.js
-            color.js (LUT, kadr tahlili) · textfx.js (2D/3D matn renderi) · text.js · cdp.js · flow.js · main.js
+            color.js (LUT, kadr tahlili) · textfx.js (2D/3D matn renderi) · text.js · main.js
 host/host.jsx  ExtendScript (faqat ASCII): audio/kadr eksporti, motion, SFX, kesish, SRT, import
 tests/      node --test tests/*.test.cjs  ·     node tests/ui.e2e.cjs  (Chromium + Premiere taqlidi)
 ```

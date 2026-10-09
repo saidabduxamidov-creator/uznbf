@@ -148,12 +148,8 @@ button:focus-visible,summary:focus-visible {outline:2px solid #a9bbff;outline-of
 .plan-item .kind.cut {color:#ffb2b2;}
 
 /* ---------- Video AI ---------- */
-.engine-box {margin-top:12px;}
-.engine-box .note {margin-top:0;}
 .prompt-info {color:#a9bff5;font-size:11px;margin:4px 0 12px;}
 .prompt-info pre {white-space:pre-wrap;font:10.5px/1.55 var(--mono);color:var(--muted);background:#12161d;padding:10px;border-radius:7px;user-select:text;}
-.capture-info {font:11px var(--mono);color:#9dadcb;background:#111722;padding:9px;border-radius:7px;overflow-wrap:anywhere;}
-.flow-progress .steps {margin:16px 0;gap:3px;}
 #flowStatus {color:#b7c7e5;font-size:12px;min-height:34px;margin:14px 0 0;overflow-wrap:anywhere;}
 #flowStatus.error {color:#ffb2b2;}
 .result-ready {color:#70deb3;font-weight:600;margin-top:14px;}

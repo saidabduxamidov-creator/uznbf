@@ -29,7 +29,6 @@ Interfeys Premiere versiyasi bilan bir xil, faqat After Effects tilida:
 | SFX | Audio qatlam, Project panelida "GeminiCut SFX" papkasi |
 | Animatsion matn / Gym / fonli matn | **Tahrirlanadigan** rejimi (standart): AE'ning o'z **matn qatlami** + fon uchun **Shape qatlam** (matnga bog'langan, o'lchami matnga o'zi moslashadi) + oddiy keyframe animatsiya. **Kadrlar (PNG)** rejimi: PNG ketma-ketligi ("GeminiCut Matn" papkasi) |
 | 3D logo | **Null** ("GeminiCut Logo: …", "Qalinlik" slayderi) + 12 ta 3D qatlam (asl PNG, orqadagilari qoraytirilgan); aylanish/o'lcham/joy — Null'ning Transform'ida |
-| Video AI (Veo / Flow) | Yangi qatlam, audiosi o'chiq |
 | Rang berish (ChatGPT) | Faqat DaVinci Resolve versiyasida |
 
 Har bir amal **bitta Undo** guruhi — `Ctrl+Z` bilan bir bosishda qaytadi.

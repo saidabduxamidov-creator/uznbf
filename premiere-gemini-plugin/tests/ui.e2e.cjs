@@ -37,7 +37,7 @@ function runScript(script) {
   const paths = [];
   script = script.replace(/"([A-Za-z]:\/[^"]*)"/g, (m, p) => { paths.push(p); return JSON.stringify(toReal(p)); });
   // Import qilinadigan fayllar haqiqiy diskda ham bo'lishi kerak
-  if (/^gc_(insertSound|importSrt|flowImport)/.test(script) && paths[0]) { fs.mkdirSync(path.dirname(toReal(paths[0])), { recursive: true }); fs.writeFileSync(toReal(paths[0]), 'x'); }
+  if (/^gc_(insertSound|importSrt)/.test(script) && paths[0]) { fs.mkdirSync(path.dirname(toReal(paths[0])), { recursive: true }); fs.writeFileSync(toReal(paths[0]), 'x'); }
   paths.forEach((p) => fs.mkdirSync(path.dirname(toReal(p)), { recursive: true }));
   // Matn: PNG ketma-ketligi haqiqiy diskda ham bo'lsin (host kadrlar sonini papkadan oladi)
   const seqm = /^gc_importSequence\("[^"]*",(\d+),/.exec(script);
@@ -276,13 +276,9 @@ const SHIM = fs.readFileSync(path.join(__dirname, 'browser-shim.js'), 'utf8');
   check((await page.$eval('#noteText', (e) => e.value)).includes('[KADR 1]'), 'AI matni qo\'shildi');
   await shot('11-bloknot');
 
-  console.log('Video AI');
-  await tab('flow');
-  await page.waitForTimeout(300);
-  await shot('12-video-ai');
-  await page.click('#flowEngine [data-v="flow"]');
-  await page.waitForTimeout(200);
-  await shot('13-flow');
+  check(!(await page.$('.tab[data-tab="flow"]')) && !(await page.$('#view-flow')) && !(await page.evaluate(() => 'GCFlow' in window || 'GCCdp' in window || 'veoStart' in window.GCGemini)),
+    'Google Flow / Veo olib tashlangan');
+  check(await page.evaluate(() => typeof window.GCGemini.generateJson === 'function' && typeof window.GCGemini.generateText === 'function'), 'Gemini (rasmiy API) saqlangan');
 
   console.log('Sozlamalar');
   await tab('settings');

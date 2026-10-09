@@ -39,7 +39,7 @@
         <div class="logo"><svg><use href="#i-spark"/></svg></div>
         <div>
           <div class="brand-name">GeminiCut</div>
-          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.6</span></div>
+          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.7</span></div>
         </div>
       </div>
       <div class="status">
@@ -70,7 +70,6 @@
       <button class="tab" data-tab="text" role="tab"><svg><use href="#i-text"/></svg><span>Matn</span><b class="new-badge">3D</b></button>
       <button class="tab" data-tab="chatgpt" role="tab"><svg><use href="#i-gpt"/></svg><span>ChatGPT</span><b class="new-badge">AI</b></button>
       <button class="tab" data-tab="claude" role="tab"><svg><use href="#i-claude"/></svg><span>Claude</span></button>
-      <button class="tab" data-tab="flow" role="tab"><svg><use href="#i-video"/></svg><span>Video AI</span></button>
       <button class="tab" data-tab="notes" role="tab"><svg><use href="#i-note"/></svg><span>Bloknot</span></button>
       <button class="tab" data-tab="settings" role="tab"><svg><use href="#i-gear"/></svg><span>Sozlamalar</span></button>
     </nav>
@@ -498,50 +497,6 @@
         </div>
       </section>
 
-      <!-- ============ VIDEO AI (Veo / Flow) ============ -->
-      <section class="view" id="view-flow">
-        <div class="section-heading"><div><div class="eyebrow">KADRDAN VIDEOGA</div><h1>Video AI</h1><p>Timeline'dagi kadrga harakat bering: Veo yoki Google Flow.</p></div><span class="version-chip">Veo / Flow</span></div>
-        <div class="card">
-          <div class="card-heading"><span class="step-number">01</span><h2>Qayerda yaratiladi</h2></div>
-          <div class="segmented" id="flowEngine"><button data-v="veo" class="on">Veo · avtomatik</button><button data-v="flow">Google Flow · brauzer</button></div>
-          <div id="veoBox" class="engine-box">
-            <p class="note">Rasmiy Gemini API. Sizning Gemini kalitingiz ishlatiladi, hech narsa o'rnatish kerak emas. Veo pullik (Google AI Studio'da billing yoqilgan bo'lishi kerak).</p>
-            <div class="input-group"><select id="veoModel" data-flow-idle></select><button class="icon-btn" id="veoRefresh" title="Modellar ro'yxati" data-flow-idle><svg><use href="#i-refresh"/></svg></button></div>
-            <p class="hint" id="veoHint"></p>
-          </div>
-          <div id="flowBox" class="engine-box" hidden>
-            <p class="note"><b>flow.google.com</b> - sizning Flow akkauntingiz va kreditlaringiz. Plagin alohida GeminiCut brauzer oynasini ochadi: kirilmagan bo'lsa Google kirish sahifasi chiqadi, bir marta kirasiz - keyin profil eslab qoladi. Parol plaginga emas, faqat Google'ning o'z oynasiga kiritiladi. Hech narsa o'rnatish kerak emas.</p>
-            <div class="grid2">
-              <label class="field"><span>Brauzer</span><select id="flowChannel" data-flow-idle><option value="chrome">Google Chrome</option><option value="msedge">Microsoft Edge</option></select></label>
-              <div class="field"><span>Akkaunt</span><span id="flowAccountState" class="status-label">Brauzer yopiq</span></div>
-            </div>
-            <p class="hint" id="flowBrowserInfo"></p>
-            <div class="button-row"><button class="btn" id="flowOpen" data-flow-idle>flow.google.com ni ochish / akkauntni ulash ↗</button></div>
-            <label class="switch-row"><input type="checkbox" id="flowAutoClick" data-flow-idle /><i class="switch"></i><em>Generate tugmasini avtomatik bosish <small>o'chiq bo'lsa - siz bosasiz</small></em></label>
-            <button class="link-btn muted" id="flowLogout" data-flow-idle>Profildan chiqish (GeminiCut profilini o'chirish)</button>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-heading"><span class="step-number">02</span><h2>Harakatni tasvirlang</h2></div>
-          <textarea id="flowPrompt" data-flow-idle rows="4" maxlength="8000" placeholder="Masalan: Kamera sekin yaqinlashsin, odam yengil bosh irg'asin."></textarea>
-          <label class="switch-row"><input type="checkbox" id="flowKeep" checked data-flow-idle /><i class="switch"></i><em>Yuz, kiyim, logotip va fonni saqlash ko'rsatmasini qo'shish</em></label>
-          <details class="prompt-info"><summary>Yuboriladigan to'liq prompt</summary><pre id="flowPromptPreview"></pre></details>
-          <div class="grid2">
-            <label class="field"><span>Timeline'dagi joy</span><select id="flowPosition" data-flow-idle><option value="captured">Kadr olingan joyga</option><option value="current">Import paytidagi playhead</option></select></label>
-            <div class="field"><span>&nbsp;</span><label class="switch-row"><input type="checkbox" id="flowAutoImport" checked data-flow-idle /><i class="switch"></i><em>Avtomatik qo'shish</em></label></div>
-          </div>
-          <p class="capture-info" id="flowCaptureInfo">Playhead'ni kerakli kadr ustiga qo'ying.</p>
-          <button class="btn primary big" id="flowGenerate" data-flow-idle><svg><use href="#i-spark"/></svg><span>Veo bilan yaratish</span></button>
-        </div>
-        <div class="card flow-progress">
-          <div class="card-heading"><h2>Jarayon</h2><button class="link-btn danger" id="flowCancel" disabled>To'xtatish</button></div>
-          <ol class="steps" id="flowSteps"><li>Kadr</li><li>Yuborish</li><li>Generatsiya</li><li>MP4</li><li>Timeline</li></ol>
-          <p id="flowStatus" role="status" aria-live="polite">Playhead'ni kadr ustiga qo'ying va harakatni yozing.</p>
-          <div id="flowResult" hidden><div class="result-ready">✓ Video tayyor</div><p id="flowResultPath"></p><button class="btn primary" id="flowImport" data-flow-idle>Timeline'ga qo'shish</button></div>
-          <div class="button-row compact"><button class="link-btn" id="flowManual" data-flow-idle>Tayyor MP4 ni tanlash</button><button class="link-btn muted" id="flowOpenFolder">Videolar papkasi</button></div>
-        </div>
-      </section>
-
       <!-- ============ BLOKNOT ============ -->
       <section class="view" id="view-notes">
         <div class="section-heading"><div><div class="eyebrow">IJODIY MAYDON</div><h1>Bloknot</h1><p>Senariy, g'oya va qaydlar - AI yozishga yordam beradi.</p></div></div>
@@ -580,7 +535,7 @@
         <div class="section-heading"><div><div class="eyebrow">ISH MUHITI</div><h1>Sozlamalar</h1><p>AI kalitlari, audio eksport va til sozlamalari.</p></div></div>
         <div class="card">
           <div class="field">
-            <span>Gemini API kalit <em class="opt">subtitr, montaj, Veo</em></span>
+            <span>Gemini API kalit <em class="opt">subtitr, montaj</em></span>
             <div class="input-group">
               <input id="apiKey" type="password" placeholder="AIza..." autocomplete="off" spellcheck="false" />
               <button class="icon-btn" id="toggleKey" title="Ko'rsatish"><svg><use href="#i-eye"/></svg></button>
@@ -649,7 +604,7 @@
           <details class="log-box"><summary>Jurnal (diagnostika)</summary><pre id="log"></pre></details>
           <button class="btn ghost" id="btnClearCache">Tahlil keshini tozalash</button>
         </div>
-        <p class="about">GeminiCut <span id="ver">4.6.1</span> &middot; Premiere Pro 2022-2026</p>
+        <p class="about">GeminiCut <span id="ver">4.7.0</span> &middot; Premiere Pro 2022-2026</p>
       </section>
     </main>
 
@@ -663,7 +618,6 @@
   <script src="js/ai.js"></script>
   <script src="js/motion.js"></script>
   <script src="js/sfxgen.js"></script>
-  <script src="js/cdp.js"></script>
   <script src="js/library.js"></script>
   <script src="js/notes.js"></script>
   <script src="js/claude.js"></script>
@@ -673,7 +627,6 @@
   <script src="js/textfx-plates.js"></script>
   <script src="js/textfx-gym.js"></script>
   <script src="js/text.js"></script>
-  <script src="js/flow.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

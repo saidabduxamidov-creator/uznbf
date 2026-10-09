@@ -123,7 +123,7 @@ test('kesish: qatlamlar bo\'linadi, chapga suriladi, keyframe\'lar birga, kompoz
   assert.ok(comp.frames.length === 0);
 });
 
-test('SFX, kadrlar, Video AI importi', () => {
+test('SFX va kadrlar', () => {
   const { host, comp, app, dir } = setup();
   const wav = path.join(dir, 'whoosh.wav'); fs.writeFileSync(wav, 'RIFF');
   let r = host.call('gc_insertSound', wav, -1, 4.5, [2]);
@@ -135,11 +135,7 @@ test('SFX, kadrlar, Video AI importi', () => {
   assert.strictEqual(app.project.items.filter ? 1 : 1, 1);
   r = host.call('gc_exportFrames', path.join(dir, 'f'), [1, 6.5]);
   assert.strictEqual(r.files.length, 2); assert.deepStrictEqual(comp.frames, [1, 6.5]);
-  const cap = host.call('gc_flowCapture', path.join(dir, 'frame'));
-  assert.ok(cap.ok, cap.error); assert.strictEqual(cap.seconds, 8);
-  const mp4 = path.join(dir, 'Veo.mp4'); fs.writeFileSync(mp4, 'x');
-  r = host.call('gc_flowImport', mp4, cap.sequenceID, cap.ticks, '', false);
-  assert.ok(r.ok, r.error); assert.strictEqual(r.track, 0); assert.strictEqual(comp.layer(1).inPoint, 8); assert.strictEqual(comp.layer(1).audioEnabled, false);
+  assert.ok(!('gc_flowCapture' in host.api) && !('gc_flowImport' in host.api), 'Flow/Veo funksiyalari olib tashlangan');
 });
 
 test('animatsion matn: PNG ketma-ketligi eng yuqoriga, kadr tezligi, almashtirish', () => {

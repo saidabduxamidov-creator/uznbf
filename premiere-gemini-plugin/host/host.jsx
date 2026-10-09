@@ -12,7 +12,7 @@
  * Barcha vaqtlar - sequence (timeline) soniyalarida, aks holda aytiladi.
  */
 
-var GC_VERSION = "4.6.1";
+var GC_VERSION = "4.7.0";
 var GC_TICKS = 254016000000;
 
 /* ======================= yordamchi funksiyalar ======================= */
@@ -725,7 +725,7 @@ function gc_insertSound(filePath, trackIndex, at, avoid) {
     }
 }
 
-/* ======================= kadr eksporti (Claude, Flow) ======================= */
+/* ======================= kadr eksporti ======================= */
 
 /*
  * Berilgan timeline vaqtlaridagi kadrlarni PNG qilib eksport qiladi.
@@ -754,75 +754,6 @@ function gc_exportFrames(base, times) {
     } finally {
         try { if (saved) seq.setPlayerPosition(String(saved.ticks)); } catch (eR) {}
     }
-}
-
-/* Flow / Veo uchun joriy playhead kadri */
-function gc_flowCapture(frameBase) {
-    try {
-        var seq = gc_seq();
-        if (!frameBase || /[\r\n]/.test(frameBase)) return gc_fail("PNG yo'li noto'g'ri.");
-        var target = new File(frameBase + ".png");
-        if (!target.parent.exists) return gc_fail("Vaqtinchalik papka topilmadi.");
-        var position = seq.getPlayerPosition();
-        app.enableQE();
-        var qseq = qe.project.getActiveSequence();
-        if (!qseq || !qseq.exportFramePNG) return gc_fail("Bu Premiere versiyasida PNG eksporti mavjud emas.");
-        qseq.exportFramePNG(qseq.CTI.timecode, new File(frameBase).fsName);
-        if (!target.exists) return gc_fail("Kadr saqlanmadi.");
-        var w = 1920, h = 1080;
-        try { w = seq.frameSizeHorizontal || w; h = seq.frameSizeVertical || h; } catch (eF) {}
-        return gc_ok({
-            sequenceID: String(seq.sequenceID), sequenceName: seq.name,
-            projectPath: String(app.project.path || ""), ticks: String(position.ticks),
-            seconds: Number(position.seconds), frame: target.fsName, width: w, height: h
-        });
-    } catch (e) { return gc_fail("Kadr eksporti: " + (e.message || e.toString())); }
-}
-
-function gc_flowAlreadyPlaced(seq, sourcePath) {
-    for (var v = 0; v < seq.videoTracks.numTracks; v++) {
-        var clips = seq.videoTracks[v].clips;
-        for (var c = 0; c < clips.numItems; c++) {
-            if (gc_itemPath(clips[c]) === gc_normPath(sourcePath)) return true;
-        }
-    }
-    return false;
-}
-
-/*
- * Tayyor MP4'ni yangi yuqori video trekka (faqat video, audiosiz) qo'yadi.
- * Kadr olingan sequence/loyiha tekshiriladi - boshqa joyga jimgina qo'yilmaydi.
- */
-function gc_flowImport(filePath, sequenceID, ticks, projectPath, useCurrent) {
-    try {
-        var seq = app.project.activeSequence;
-        if (!seq) return gc_fail("Faol timeline yo'q. Video diskda saqlangan.");
-        if (sequenceID && String(seq.sequenceID) !== String(sequenceID)) return gc_fail("Kadr olingan timeline'ni qayta oching, so'ng importni qayta bosing.");
-        if (projectPath && String(app.project.path || "") !== projectPath) return gc_fail("Kadr olingan loyiha o'zgargan. Asl loyihani oching.");
-        var file = new File(filePath);
-        if (!file.exists || !/\.mp4$/i.test(file.name)) return gc_fail("MP4 fayl topilmadi.");
-        if (gc_flowAlreadyPlaced(seq, file.fsName)) return gc_ok({ alreadyPlaced: true });
-        var at = useCurrent ? seq.getPlayerPosition() : new Time();
-        if (!useCurrent) {
-            if (!/^\d+$/.test(String(ticks))) return gc_fail("Timeline vaqti noto'g'ri.");
-            at.ticks = String(ticks);
-        }
-        var item = gc_importOnce(file.fsName);
-        // Faqat video subklip - generatsiya audiosi nutq/musiqani bosib ketmasin
-        var inTime = item.getInPoint(1), outTime = item.getOutPoint(1);
-        if (!outTime || outTime.seconds <= inTime.seconds) return gc_fail("Video davomiyligi aniqlanmadi. MP4 Project'da saqlandi.");
-        var videoOnly = item.createSubClip("AI \u00B7 " + file.name, String(inTime.ticks), String(outTime.ticks), 1, 1, 0) || item;
-        var count = seq.videoTracks.numTracks;
-        app.enableQE();
-        var qseq = qe.project.getActiveSequence();
-        if (!qseq || !qseq.addTracks) return gc_fail("Yangi video trek yaratilmadi. MP4 Project'da saqlandi.");
-        qseq.addTracks(1, count, 0);
-        if (seq.videoTracks.numTracks !== count + 1) return gc_fail("Yangi trek tasdiqlanmadi. MP4 Project'da saqlandi.");
-        var track = seq.videoTracks[count];
-        track.overwriteClip(videoOnly, String(at.ticks));
-        if (track.clips.numItems !== 1) return gc_fail("Timeline importi tasdiqlanmadi. MP4 Project'da saqlandi.");
-        return gc_ok({ track: count + 1, seconds: track.clips[0].start.seconds, name: file.name });
-    } catch (e) { return gc_fail("Import: " + (e.message || e.toString()) + ". Yuklangan MP4 saqlangan."); }
 }
 
 /* ======================= animatsion matn (PNG ketma-ketligi) ======================= */

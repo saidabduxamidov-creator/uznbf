@@ -15,7 +15,7 @@
  */
 "use strict";
 
-const VERSION = "4.6.1";
+const VERSION = "4.7.0";
 const BIN = "GeminiCut";
 
 function pad(n) { return String(n).padStart(2, "0"); }
@@ -929,34 +929,6 @@ function createHost(resolve, deps) {
       }
       if (!files.length && times.length) throw new Error("Kadr eksport qilinmadi. Resolve'da Color yoki Edit sahifasida timeline ochiq bo'lsin.");
       return { files };
-    },
-
-    async gc_flowCapture(frameBase) {
-      const e = await env();
-      const ph = await playheadFrame(e);
-      const frame = frameBase + ".png";
-      if (!(await e.project.ExportCurrentFrameAsStill(frame)) || !fs.existsSync(frame)) throw new Error("Kadr eksport qilinmadi.");
-      return { sequenceID: String((await e.tl.GetUniqueId?.()) || (await e.tl.GetName())), sequenceName: await e.tl.GetName(), projectPath: "",
-        ticks: String(ph), seconds: sec(e, ph), frame, width: Number(await e.tl.GetSetting("timelineResolutionWidth")) || 1920,
-        height: Number(await e.tl.GetSetting("timelineResolutionHeight")) || 1080 };
-    },
-
-    /* Tayyor MP4 - yangi video trekka (faqat video), kadr olingan joyga */
-    async gc_flowImport(file, sequenceID, frameStr, projectPath, useCurrent) {
-      const e = await env();
-      const id = String((await e.tl.GetUniqueId?.()) || (await e.tl.GetName()));
-      if (sequenceID && id !== String(sequenceID)) throw new Error("Kadr olingan timeline'ni qayta oching, so'ng importni qayta bosing.");
-      const mpi = await importOnce(e, file, "AI Video");
-      const frames = await clipFrames(e, mpi);
-      const rec = useCurrent ? await playheadFrame(e) : Number(frameStr);
-      if (!Number.isFinite(rec)) throw new Error("Timeline vaqti noto'g'ri.");
-      const nv = await e.tl.GetTrackCount("video");
-      await e.tl.AddTrack("video");
-      const idx = await e.tl.GetTrackCount("video");
-      if (idx <= nv) throw new Error("Yangi video trek yaratilmadi.");
-      const placed = await e.mp.AppendToTimeline([{ mediaPoolItem: mpi, startFrame: 0, endFrame: frames - 1, trackIndex: idx, recordFrame: rec, mediaType: 1 }]);
-      if (!placed || !placed.length) throw new Error("Video timeline'ga qo'yilmadi. MP4 Media Pool'da (GeminiCut → AI Video).");
-      return { track: idx, seconds: sec(e, rec), name: path.basename(file) };
     },
 
     /* ---------------- rang berish (ChatGPT) ---------------- */

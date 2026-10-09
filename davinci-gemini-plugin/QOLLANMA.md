@@ -20,7 +20,7 @@ o'rnatuvchi Resolve bilan keladigan `WorkflowIntegration.node` modulini ishlatad
 | Timeline ovozi | Faqat nutq treklari yoqilgan holda WAV render qilinadi, keyin treklar holati tiklanadi |
 | SFX | Media Pool > GeminiCut > SFX ga import, bo'sh audio trekka qo'yiladi (kerak bo'lsa yangi trek) |
 | Subtitr | SRT Media Pool > GeminiCut > Subtitrlar ga import va subtitr trekiga qo'yiladi. Resolve rad etsa — SRT'ni Media Pool'dan timeline'ga sudrab qo'ying |
-| Claude kadrlari / Video AI kadri | `ExportCurrentFrameAsStill` orqali |
+| Claude / ChatGPT kadrlari | `ExportCurrentFrameAsStill` orqali |
 | Rang berish (ChatGPT) | Faqat Resolve'da: LUT alohida rang versiyasida |
 | Animatsion matn | PNG ketma-ketligi (`ImportMedia` + `AppendToTimeline`) |
 

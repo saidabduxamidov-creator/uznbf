@@ -109,7 +109,7 @@ test('kesish: pauzalarsiz yangi timeline, manba kadrlari to\'g\'ri, zoom qayta q
   assert.match(zoomed.comps[0].scripts[0], /tr\.Size\[s \+ 50\] = 1\n/, '15s -> yangi 13s, klip boshidan 2s = 50 kadr');
 });
 
-test('SRT, kadr eksporti va AI video importi', async () => {
+test('SRT va kadr eksporti', async () => {
   const { host, tl, project } = setup();
   const dir = tmp();
   const srt = path.join(dir, 'a.srt'); fs.writeFileSync(srt, '1\n00:00:01,000 --> 00:00:02,000\nSalom\n');
@@ -118,13 +118,7 @@ test('SRT, kadr eksporti va AI video importi', async () => {
   r = await host.gc_exportFrames(path.join(dir, 'f'), [1, 10]);
   assert.strictEqual(r.files.length, 2); assert.strictEqual(tl.ph, START + 8 * FPS, 'playhead tiklandi');
   assert.deepStrictEqual(project.stills.map((s) => s.frame), [START + 25, START + 250]);
-  const cap = await host.gc_flowCapture(path.join(dir, 'frame'));
-  assert.ok(cap.ok, cap.error); assert.strictEqual(cap.seconds, 8);
-  const mp4 = path.join(dir, 'Veo.mp4'); fs.writeFileSync(mp4, 'x');
-  r = await host.gc_flowImport(mp4, cap.sequenceID, cap.ticks, '', false);
-  assert.ok(r.ok, r.error); assert.strictEqual(r.track, 2); assert.strictEqual(tl.tracks.video[1][0].start, START + 8 * FPS);
-  r = await host.gc_flowImport(mp4, 'boshqa', cap.ticks, '', false);
-  assert.strictEqual(r.ok, false);
+  assert.ok(!('gc_flowCapture' in host) && !('gc_flowImport' in host), 'Flow/Veo funksiyalari olib tashlangan');
 });
 
 test('rang: Color node LUT alohida versiyada, tasdiqlanadi, qayta qo\'llash va qaytarish', async () => {
