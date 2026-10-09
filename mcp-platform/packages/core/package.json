@@ -1,0 +1,14 @@
+{
+  "name": "@lmp/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Domain contracts of the local MCP platform: tools, errors, capabilities and ports. No infrastructure.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": { ".": { "types": "./dist/src/index.d.ts", "default": "./dist/src/index.js" } },
+  "dependencies": {
+    "zod": "4.6.5"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "@lmp/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP (stdio) server of the local MCP platform for Claude Desktop and ChatGPT Desktop.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": { ".": { "types": "./dist/src/index.d.ts", "default": "./dist/src/index.js" } },
+  "bin": { "lmp-server": "./dist/src/cli.js" },
+  "dependencies": {
+    "@lmp/core": "0.1.0",
+    "@lmp/kernel": "0.1.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "4.6.5"
+  }
+}

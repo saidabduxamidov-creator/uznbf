@@ -1,0 +1,15 @@
+{
+  "name": "@lmp/kernel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Infrastructure of the local MCP platform: DI, configuration, logging, events, cache, queue, permissions, persistence, metrics, registry, discovery and execution.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": { ".": { "types": "./dist/src/index.d.ts", "default": "./dist/src/index.js" } },
+  "dependencies": {
+    "@lmp/core": "0.1.0",
+    "zod": "4.6.5"
+  }
+}
