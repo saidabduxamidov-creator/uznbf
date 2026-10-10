@@ -49,6 +49,10 @@ export class ToolRegistry {
     if (!definition.name.startsWith(`${pkg.id}.`)) throw new ValidationError(`Tool "${definition.name}" must be namespaced under "${pkg.id}."`);
     if (this.tools.has(definition.name)) throw new ValidationError(`Duplicate tool "${definition.name}"`);
     if (!(definition.input instanceof z.ZodObject)) throw new ValidationError(`Tool "${definition.name}" input must be a zod object`);
+    if (definition.execution.longRunning && definition.output) {
+      // A long-running call may answer with a job reference, which could not satisfy the schema.
+      throw new ValidationError(`Long-running tool "${definition.name}" cannot declare an output schema; return structured data from the job result instead`);
+    }
     const registered: RegisteredTool = {
       definition,
       packageId: pkg.id,

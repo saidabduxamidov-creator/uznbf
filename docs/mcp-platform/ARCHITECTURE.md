@@ -1,12 +1,21 @@
 # Local MCP Platform — Architecture (Phases 1–4)
 
-Status: **design, awaiting approval**. No platform code has been written yet; Phase 5 (implementation)
-starts after the open decisions in §6 are answered.
+Status: **approved; Phase 5 in progress** (see §7 for what is implemented).
 
-Scope rule enforced everywhere in this document: the platform serves **exactly two AI clients —
-ChatGPT (OpenAI) and Claude (Anthropic)** — over the Model Context Protocol, runs **only on the
-user's computer**, and contains **no code, dependency or compatibility layer for Google Gemini /
-Vertex / AI Studio or any other AI provider**.
+Scope:
+- The MCP platform serves **exactly two MCP clients — Claude Desktop and ChatGPT Desktop** — over
+  stdio, and runs **only on the user's computer**. ChatGPT Web is not supported.
+- The MCP platform performs **no AI calls** and contains **no AI provider SDKs**.
+- **Google Gemini stays in the editing panels**, through its official API only. It is independent of
+  the MCP platform and is never routed through it.
+- Google Flow and Veo are removed from the product.
+
+Supported AI providers of the product:
+| Provider | How it is used |
+|---|---|
+| Claude | Through MCP (Claude Desktop) |
+| ChatGPT | Through MCP (ChatGPT Desktop) |
+| Gemini | Official API, inside the panels |
 
 ---
 
@@ -53,15 +62,18 @@ AI access today is **API-first, inside the panel**:
 | P5 | Text templates render with Canvas2D/WebGL in Chromium | Node has no DOM/WebGL; rendering must stay in a browser context |
 | P6 | Long jobs (render, export, ffmpeg) block the panel; cancellation is ad-hoc | Needs a real queue with progress + cancellation |
 
-### 1.4 Gemini removal inventory (for the platform and for the panel migration)
+### 1.4 Google Flow / Veo removal (done in panels 4.7.0)
 
-- Remove entirely: `gemini.js` (`GCGemini.generateJson/generateText/testKey/download/veo*`),
-  `flow.js` (Veo + Google Flow), the "Video AI" tab, Gemini key settings, Gemini-based subtitle
-  transcription and proofreading.
-- Keep but move out of `gemini.js`: `createCancelToken`, `sleep` (generic utilities).
-- Rename: product name, folder names (`*-gemini-plugin`), CEP bundle IDs (`com.uzstudio.geminicut*`),
-  installer names, `Documents\GeminiCut` paths. **The platform itself uses a new name from day one**
-  (see decision D2) and a CI guard rejects banned identifiers (§2.13).
+- **Removed:**
+  - `flow.js` (Google Flow browser workflow) and `cdp.js` (its Chrome DevTools driver);
+  - the "Video AI" tab and Flow/Veo settings and styles;
+  - Veo calls and video download in `gemini.js`;
+  - the `gc_flowCapture` / `gc_flowImport` host functions in Premiere, After Effects and Resolve;
+  - their tests and documentation.
+- **Kept:** Gemini through its official API (`gemini.js`: text/JSON generation, file upload) for
+  subtitles and editing inside the panels. All other host functions are unchanged.
+- **Product rename:** postponed (decision D2). The platform uses a neutral temporary name defined in
+  one place (`@lmp/core` `PRODUCT`).
 
 ---
 
@@ -134,8 +146,9 @@ tool plugins  →  core (contracts) only; they receive infrastructure through th
   `JobService`, `DiscoveryService`. Depends only on core ports.
 - **infrastructure** — concrete adapters: SQLite repositories, two-tier cache, pino-based logger,
   process runner, WebSocket host-bridge client, config loader, metrics.
-- **interface/mcp** — the *only* place that imports the MCP SDK. Maps registry entries to
-  `registerTool` / `registerResource` / `registerPrompt`, progress and cancellation to the protocol.
+- **interface/mcp** — the *only* place that imports the MCP SDK. It uses the SDK's low-level
+  `Server`, so the platform owns tool listing (JSON Schemas precomputed from zod), validation,
+  error mapping, progress and cancellation. The SDK provides transport and JSON-RPC.
 
 Trade-off: more packages and interfaces than a single-file server. In return, the MCP SDK (which is
 still evolving) can be upgraded by touching one package, and every tool is testable without MCP.
@@ -269,9 +282,11 @@ Everything is **deny by default**:
   - no `eval` / `new Function` on model input;
   - generated ExtendScript arguments are JSON-encoded, never concatenated.
 - **No telemetry, analytics or update checks.**
-- **CI guard:** the build fails if forbidden identifiers or hosts appear in platform sources or
-  dependencies (Gemini / Vertex / Google AI endpoints, any unlisted network host), and if any
-  dependency has an install script.
+- **CI guard** (`scripts/guard.mjs`): the build fails when platform sources or the lockfile:
+  - reference Google AI (Gemini/Vertex/AI Studio) or Flow/Veo, since Gemini lives only in the panels;
+  - import any AI provider SDK or endpoint;
+  - open network connections outside an explicit module allowlist;
+  - depend on packages with install scripts.
 - **Supply chain:**
   - a pinned lockfile;
   - `npm ci --ignore-scripts`;
@@ -300,7 +315,9 @@ Everything is **deny by default**:
   installs nothing), ES modules, the official MCP TypeScript SDK pinned to an exact version.
 - **Dependency injection:** a small typed container with an explicit composition root. No
   decorators or reflect-metadata: plain constructors are easier to test and avoid runtime reflection.
-- **Build and test:** `tsc` for type checks, `esbuild` to bundle each package, Vitest for tests.
+- **Build and test:** `tsc -b` (project references) for builds and type checks. Tests use Node's
+  built-in `node:test` on the compiled output: zero extra test dependencies and the same runtime
+  that ships. Bundling is part of Phase 8.
 
 ---
 
@@ -354,7 +371,7 @@ then they are renamed and their API tabs are removed (decision D3).
 |---|---|---|
 | **MCP Server** (`server/mcp`) | Owns the SDK `McpServer`, stdio transport (optional Streamable HTTP bound to 127.0.0.1 with a token, off by default), capability profile per client | The only SDK importer; translates errors, progress, cancellation |
 | **Tool Registry** (`kernel/registry`) | Stores validated tool definitions; unique, namespaced ids (`premiere.apply_cuts`); annotations (read-only / destructive / idempotent / open-world) | Immutable after startup unless hot discovery is enabled |
-| **Tool Discovery** (`kernel/discovery`) | Scans tool directories, validates manifests, checks trust and OS support, loads the package lazily on first call | Lazy loading keeps startup under ~300 ms |
+| **Tool Discovery** (`kernel/packages`) | Scans tool directories, validates manifests, checks trust (sha-256 before import) and OS support, registers each package in isolation | Eager loading: `tools/list` needs every schema, so packages load at startup; a failing package is skipped, never fatal |
 | **Resource Manager** | `platform://` resources: health, metrics, jobs, artifacts (frames, transcripts, EDLs), host state snapshots; subscriptions where the client supports them | Large binary data is served as resources, not inline |
 | **Prompt Manager** | Loads `prompts/*.md`, validates declared arguments, exposes MCP prompts (workflows such as "remove pauses", "grade this clip") | Prompts are data, versioned, no code change to add one |
 | **Cache** | Two-tier content-addressed cache (§2.8) | Size-bounded, crash-safe atomic writes |
@@ -410,12 +427,25 @@ then they are renamed and their API tabs are removed (decision D3).
 
 ---
 
-## 6. Open decisions (needed before Phase 5)
+## 6. Decisions (final)
 
-| # | Decision | Recommendation |
+| # | Decision |
+|---|---|
+| D1 | MCP clients: **Claude Desktop and ChatGPT Desktop**, local stdio only. ChatGPT Web is not supported. |
+| D2 | Neutral temporary name ("Local MCP Platform", ids `lmp`). Renaming touches only `packages/core/src/product.ts`. |
+| D3 | **Gemini stays** in the panels through its official API, outside MCP. **Google Flow and Veo are removed** (done). Claude and ChatGPT reach local tools through MCP. |
+| D4 | Speech recognition: **whisper.cpp, fully offline**. No cloud transcription. |
+| D5 | **Windows only for v1**. Platform-specific code is isolated (`kernel/paths`, permission path rules, tool adapters) so macOS is an addition, not a refactor. |
+
+## 7. Implementation status
+
+| Step | Content | State |
 |---|---|---|
-| D1 | ChatGPT surface | **ChatGPT desktop app** (local stdio). ChatGPT web Developer-mode connectors need a remote server, which violates "local only". |
-| D2 | New product / package name (the platform must not carry "Gemini") | Choose a name; the working name used until then is a neutral placeholder |
-| D3 | Existing panels: remove the in-panel OpenAI/Claude API tabs and all Gemini/Flow/Veo features once MCP parity exists | Yes — panels keep manual tools (text templates, SFX, color presets) and gain the bridge agent |
-| D4 | Subtitle transcription engine (Gemini is gone; neither client accepts raw audio through MCP) | **whisper.cpp** (OpenAI's Whisper model, running fully offline, bundled binary + model ~150–500 MB) |
-| D5 | Target OS | Windows first (current users), macOS adapters kept possible but not shipped in v1 |
+| 5.1 | `@lmp/core`: contracts, errors, capabilities, ports, tool and package API | Done, tested |
+| 5.1 | `@lmp/kernel`: paths, DI, events, logging, config, cache, queue, permissions, SQLite repositories, metrics, registry, package discovery, executor | Done, tested |
+| 5.2 | `@lmp/server`: MCP adapter (stdio), built-in `platform` package, composition root, CLI | Done; end-to-end tested with the official SDK client |
+| 5.3 | fs, ffmpeg, video-analysis tool packages | Next |
+| 5.4 | Host bridge protocol and agents (Premiere, After Effects, Resolve) | Planned |
+| 5.5 | motion, timeline, subtitles (whisper.cpp) | Planned |
+| 5.6 | clipboard, database, terminal | Planned |
+| 5.7 | ocr, browser, blender, photoshop | Planned |
