@@ -25,6 +25,12 @@ const FORBIDDEN = [
 const NETWORK_ALLOWED = new Map([
   [path.join("packages", "tools", "editor", "src", "bridge.ts"), /net\.connect\(\{ host: "127\.0\.0\.1", port \}\)/],
 ]);
+/**
+ * The browser package reaches the web through an installed Chrome/Edge. Only its driver may launch
+ * a browser, and only with request interception, the resolver lockdown and no debugging port.
+ */
+const BROWSER_DRIVER = path.join("packages", "tools", "browser", "src", "cdp.ts");
+const BROWSER_REQUIRED = [/"Fetch\.enable"/, /--host-resolver-rules=/, /"--remote-debugging-pipe"/, /"--disable-background-networking"/];
 const NETWORK_API = /\b(?:fetch\s*\(|https?\.request|https?\.get|net\.connect|tls\.connect|new\s+WebSocket\s*\(|dgram\.)/;
 
 async function walk(dir, out = []) {
@@ -55,6 +61,11 @@ for (const file of await walk(root)) {
     const required = NETWORK_ALLOWED.get(rel);
     if (!required) problems.push(`${rel}: opens network connections but is not in the network allowlist`);
     else if (!required.test(content) || (content.match(/net\.connect\(/g) ?? []).length !== 1) problems.push(`${rel}: network use differs from its allowlisted loopback connection`);
+  }
+  if (/\.(ts|mts)$/.test(file) && !isTest && /remote-debugging|msedge|chrome\.exe/.test(content)) {
+    if (rel !== BROWSER_DRIVER) problems.push(`${rel}: launches a web browser outside the browser driver`);
+    else for (const req of BROWSER_REQUIRED) if (!req.test(content)) problems.push(`${rel}: browser launch lacks ${req.source}`);
+    if (/remote-debugging-port/.test(content)) problems.push(`${rel}: debugging ports are not allowed (use the pipe)`);
   }
 }
 

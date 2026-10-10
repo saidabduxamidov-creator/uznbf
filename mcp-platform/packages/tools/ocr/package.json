@@ -1,0 +1,19 @@
+{
+  "name": "@lmp/tool-ocr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reads text from images and video frames on this computer.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "lmpTool": {
+    "id": "ocr",
+    "entry": "dist/src/index.js"
+  },
+  "dependencies": {
+    "@lmp/core": "0.1.0",
+    "@lmp/toolkit": "0.1.0",
+    "zod": "4.6.5"
+  }
+}

@@ -42,6 +42,18 @@
     },
     {
       "path": "packages/tools/terminal"
+    },
+    {
+      "path": "packages/tools/ocr"
+    },
+    {
+      "path": "packages/tools/browser"
+    },
+    {
+      "path": "packages/tools/blender"
+    },
+    {
+      "path": "packages/tools/photoshop"
     }
   ]
 }

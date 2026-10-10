@@ -40,6 +40,10 @@ Built-in tool packages:
 | `clipboard` | `read_text`, `write_text`, `read_image`, `write_image`, `read_files`, `write_files` |
 | `database` | `schema`, `query`, `execute`, `note_save`, `note_get`, `note_list`, `note_delete` |
 | `terminal` | `programs`, `run` (allow-listed programs, no shell; `terminal.exec` is denied until you allow it) |
+| `ocr` | `languages`, `image`, `video_frame` |
+| `browser` | `read_page`, `screenshot` (per-site `network` permission; denied until you allow a site) |
+| `blender` | `inspect`, `render`, `title_3d` |
+| `photoshop` | `status`, `layers`, `fill_template`, `run_action` (Windows) |
 
 The `editor` package drives Premiere Pro, After Effects and DaVinci Resolve through the panel's
 bridge agent. The panel must be open, with the MCP option enabled in its Settings.

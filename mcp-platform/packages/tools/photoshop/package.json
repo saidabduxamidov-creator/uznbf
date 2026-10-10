@@ -1,0 +1,19 @@
+{
+  "name": "@lmp/tool-photoshop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Drives Adobe Photoshop on Windows: open, run actions, export.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "lmpTool": {
+    "id": "photoshop",
+    "entry": "dist/src/index.js"
+  },
+  "dependencies": {
+    "@lmp/core": "0.1.0",
+    "@lmp/toolkit": "0.1.0",
+    "zod": "4.6.5"
+  }
+}
