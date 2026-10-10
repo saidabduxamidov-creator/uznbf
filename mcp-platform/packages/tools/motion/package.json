@@ -1,0 +1,19 @@
+{
+  "name": "@lmp/tool-motion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plans camera motion: punch-in zoom plans from speech, eased keyframes for the editor tools.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "lmpTool": {
+    "id": "motion",
+    "entry": "dist/src/index.js"
+  },
+  "dependencies": {
+    "@lmp/core": "0.1.0",
+    "@lmp/toolkit": "0.1.0",
+    "zod": "4.6.5"
+  }
+}

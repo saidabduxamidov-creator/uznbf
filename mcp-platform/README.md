@@ -24,6 +24,7 @@ Architecture, decisions and implementation status: [`../docs/mcp-platform/ARCHIT
 | `packages/kernel` | Infrastructure behind the ports: DI, config, logging, events, cache, queue, permissions, SQLite, metrics, registry, package discovery, executor. |
 | `packages/server` | MCP adapter (the only SDK user), built-in `platform` package, composition root, CLI. |
 | `packages/tools/*` | Tool packages. They are discovered at startup; adding one never changes existing code. |
+| `scripts/guard.mjs` | Build guard. Fails on AI-provider SDKs or endpoints, any Google AI/Flow/Veo reference, unapproved network code, and dependencies with install scripts. |
 
 Built-in tool packages:
 
@@ -33,6 +34,9 @@ Built-in tool packages:
 | `ffmpeg` | `probe`, `extract_frames`, `extract_audio`, `transcode` |
 | `video` | `detect_silence`, `detect_scenes`, `loudness`, `contact_sheet` |
 | `editor` | `list_hosts`, `get_timeline`, `get_selection`, `set_playhead`, `view_frames`, `apply_cuts`, `apply_zooms`, `apply_motion`, `motion_presets`, `apply_motion_preset`, `reset_motion`, `sound_library`, `insert_sound`, `insert_audio_file`, `import_subtitles`, `export_audio`, `text_templates`, `insert_text`, `color_presets`, `apply_color`, `revert_color` |
+| `subtitles` | `models`, `transcribe` (offline, whisper.cpp), `read`, `write`, `reformat` |
+| `timeline` | `build_edit` (FCP7 XML / EDL), `render_rough_cut` |
+| `motion` | `plan_zooms`, `keyframes`, `ken_burns`, `shake` |
 
 The `editor` package drives Premiere Pro, After Effects and DaVinci Resolve through the panel's
 bridge agent. The panel must be open, with the MCP option enabled in its Settings.
@@ -40,7 +44,9 @@ bridge agent. The panel must be open, with the MCP option enabled in its Setting
 The `fs` package checks every path against the local permission policy. `ffmpeg.extract_frames` and
 `video.contact_sheet` return images that the assistant looks at itself. `ffmpeg.transcode` accepts
 only named presets, never raw arguments.
-| `scripts/guard.mjs` | Build guard. Fails on AI-provider SDKs or endpoints, any Google AI/Flow/Veo reference, unapproved network code, and dependencies with install scripts. |
+
+`subtitles.transcribe` needs `whisper-cli` (configured path, `LMP_BIN_DIR` or PATH) and a
+`ggml-*.bin` model in `LMP_MODELS_DIR`; it never uses the network.
 
 ## Requirements
 
@@ -52,7 +58,7 @@ Node.js 22.12 or newer. The end-user installer bundles its own Node runtime (Pha
 npm ci            # install scripts are disabled by .npmrc
 npm run build     # tsc -b (strict, project references)
 npm run guard
-node --test "packages/*/dist/test/**/*.test.js"
+node --test "packages/*/dist/test/**/*.test.js" "packages/tools/*/dist/test/**/*.test.js"
 ```
 
 The test suite includes an end-to-end run. It starts the real server process over stdio and drives

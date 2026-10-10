@@ -1,0 +1,19 @@
+{
+  "name": "@lmp/tool-subtitles",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline speech-to-text with whisper.cpp and subtitle files (SRT/VTT) for the editors.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "lmpTool": {
+    "id": "subtitles",
+    "entry": "dist/src/index.js"
+  },
+  "dependencies": {
+    "@lmp/core": "0.1.0",
+    "@lmp/toolkit": "0.1.0",
+    "zod": "4.6.5"
+  }
+}

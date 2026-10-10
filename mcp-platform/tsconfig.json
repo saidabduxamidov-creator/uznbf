@@ -24,6 +24,15 @@
     },
     {
       "path": "packages/tools/editor"
+    },
+    {
+      "path": "packages/tools/subtitles"
+    },
+    {
+      "path": "packages/tools/timeline"
+    },
+    {
+      "path": "packages/tools/motion"
     }
   ]
 }

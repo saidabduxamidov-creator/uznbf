@@ -19,10 +19,10 @@
     "build": "tsc -b",
     "clean": "tsc -b --clean",
     "typecheck": "tsc -b --pretty",
-    "test": "npm run build && node --test --test-reporter=spec \"packages/*/dist/test/**/*.test.js\"",
+    "test": "npm run build && node --test --test-reporter=spec \"packages/*/dist/test/**/*.test.js\" \"packages/tools/*/dist/test/**/*.test.js\"",
     "test:unit": "node --test --test-reporter=spec \"packages/core/dist/test/**/*.test.js\" \"packages/kernel/dist/test/**/*.test.js\"",
     "guard": "node scripts/guard.mjs",
-    "check": "npm run build && npm run guard && node --test \"packages/*/dist/test/**/*.test.js\""
+    "check": "npm run build && npm run guard && node --test \"packages/*/dist/test/**/*.test.js\" \"packages/tools/*/dist/test/**/*.test.js\""
   },
   "devDependencies": {
     "@types/node": "22.20.5",

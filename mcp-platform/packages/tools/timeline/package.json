@@ -1,0 +1,19 @@
+{
+  "name": "@lmp/tool-timeline",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Builds edit decision lists (FCP7 XML / EDL) for Premiere and Resolve, and renders rough cuts with FFmpeg.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "lmpTool": {
+    "id": "timeline",
+    "entry": "dist/src/index.js"
+  },
+  "dependencies": {
+    "@lmp/core": "0.1.0",
+    "@lmp/toolkit": "0.1.0",
+    "zod": "4.6.5"
+  }
+}
