@@ -5,7 +5,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PRODUCT, type Logger } from "@lmp/core";
+import { PRODUCT, type Logger, type ToolPackage } from "@lmp/core";
 import {
   AuditRepository,
   ConfigWatcher,
@@ -46,6 +46,11 @@ export interface PlatformOptions {
   readonly configFile?: string;
   /** Directories with built-in (trusted) tool packages. Defaults to the bundled tools directory. */
   readonly builtinToolDirs?: readonly string[];
+  /**
+   * Tool packages compiled into the server (single-file build). When given, the default tool
+   * directories are not scanned; configured third-party directories still are.
+   */
+  readonly builtinPackages?: ReadonlyArray<{ readonly pkg: ToolPackage<unknown>; readonly location: string }>;
   readonly configOverrides?: Record<string, unknown>;
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** Extra log sink (tests). */
@@ -191,8 +196,9 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
       }),
       "server",
     );
+    for (const { pkg, location } of options.builtinPackages ?? []) await packages.registerBuiltin(pkg, location);
     const sources: PackageSource[] = [
-      ...(options.builtinToolDirs ?? defaultBuiltinToolDirs()).map((directory) => ({ directory, builtin: true })),
+      ...(options.builtinToolDirs ?? (options.builtinPackages ? [] : defaultBuiltinToolDirs())).map((directory) => ({ directory, builtin: true })),
       ...config.tools.directories.map((directory) => ({ directory: path.resolve(paths.configDir, directory), builtin: false })),
     ];
     await packages.discover(sources);

@@ -69,9 +69,15 @@ for (const file of await walk(root)) {
   }
 }
 
+/**
+ * Build-time tools exempt from the install-script rule. They are dev-only (never shipped) and the
+ * script never runs because .npmrc sets ignore-scripts; esbuild's script only re-checks that its
+ * platform binary package is present.
+ */
+const BUILD_ONLY_WITH_SCRIPT = new Set(["node_modules/esbuild"]);
 const lock = JSON.parse(await readFile(path.join(root, "package-lock.json"), "utf8"));
 for (const [name, info] of Object.entries(lock.packages ?? {})) {
-  if (info.hasInstallScript) problems.push(`package-lock.json: ${name || "(root)"} has an install script`);
+  if (info.hasInstallScript && !(BUILD_ONLY_WITH_SCRIPT.has(name) && info.dev === true)) problems.push(`package-lock.json: ${name || "(root)"} has an install script`);
   if (/node_modules\/(@google\/|openai$|@anthropic-ai\/)/.test(name)) problems.push(`package-lock.json: forbidden dependency ${name}`);
 }
 
