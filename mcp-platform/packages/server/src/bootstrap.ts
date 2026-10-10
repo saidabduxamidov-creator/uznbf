@@ -178,6 +178,7 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
       kvFor: (id) => kv.scope(id),
       dataRoot: path.join(paths.dataDir, "packages"),
       artifactsRoot: path.join(paths.cacheDir, "artifacts"),
+      platformDataDir: paths.dataDir,
       platform: process.platform,
     });
     onCleanup("packages", () => packages.disposeAll());

@@ -52,6 +52,8 @@ export interface PackageContext<C> {
   readonly logger: Logger;
   readonly services: PackageServices;
   readonly platform: NodeJS.Platform;
+  /** Platform data directory (read-only use: shared discovery files such as editor bridges). */
+  readonly platformDataDir: string;
 }
 
 export interface PackageContribution {

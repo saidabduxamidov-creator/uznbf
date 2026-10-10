@@ -32,6 +32,10 @@ Built-in tool packages:
 | `fs` | `list_directory`, `stat`, `read_text`, `read_image`, `write_text`, `make_directory`, `move`, `find`, `hash` |
 | `ffmpeg` | `probe`, `extract_frames`, `extract_audio`, `transcode` |
 | `video` | `detect_silence`, `detect_scenes`, `loudness`, `contact_sheet` |
+| `editor` | `list_hosts`, `get_timeline`, `get_selection`, `set_playhead`, `view_frames`, `apply_cuts`, `apply_zooms`, `apply_motion`, `motion_presets`, `apply_motion_preset`, `reset_motion`, `sound_library`, `insert_sound`, `insert_audio_file`, `import_subtitles`, `export_audio`, `text_templates`, `insert_text`, `color_presets`, `apply_color`, `revert_color` |
+
+The `editor` package drives Premiere Pro, After Effects and DaVinci Resolve through the panel's
+bridge agent. The panel must be open, with the MCP option enabled in its Settings.
 
 The `fs` package checks every path against the local permission policy. `ffmpeg.extract_frames` and
 `video.contact_sheet` return images that the assistant looks at itself. `ffmpeg.transcode` accepts

@@ -18,8 +18,13 @@ const FORBIDDEN = [
   [/flow\.google|\bveo\b/i, "Google Flow/Veo reference"],
   [/api\.openai\.com|(?:from|import|require\()\s*["']openai["']|api\.anthropic\.com|@anthropic-ai\/sdk|mistral|cohere|ollama|groq/i, "AI provider API/SDK (the MCP server must not call AI services)"],
 ];
-/** Modules allowed to open network connections (none yet; the browser tool will be listed here). */
-const NETWORK_ALLOWED = new Set([]);
+/**
+ * Modules allowed to open network connections, each with a pattern its connections must match.
+ * The editor bridge talks only to the panel on the loopback interface.
+ */
+const NETWORK_ALLOWED = new Map([
+  [path.join("packages", "tools", "editor", "src", "bridge.ts"), /net\.connect\(\{ host: "127\.0\.0\.1", port \}\)/],
+]);
 const NETWORK_API = /\b(?:fetch\s*\(|https?\.request|https?\.get|net\.connect|tls\.connect|new\s+WebSocket\s*\(|dgram\.)/;
 
 async function walk(dir, out = []) {
@@ -38,12 +43,18 @@ for (const file of await walk(root)) {
   const content = await readFile(file, "utf8");
   // Documentation may explain what is outside the platform; only code and manifests are policed.
   const isCode = !file.endsWith(".md");
+  // Tests drive the existing editing panels, whose folder names still carry the old product name
+  // (rename pending). Only those exact folder names are tolerated, and only in tests.
+  const isTest = /[\\/]test[\\/]/.test(rel);
+  const checked = isTest ? content.replace(/(premiere|aftereffects|davinci)-gemini-plugin/g, "$1-panel") : content;
   for (const [pattern, label] of isCode ? FORBIDDEN : []) {
-    const match = content.match(pattern);
+    const match = checked.match(pattern);
     if (match) problems.push(`${rel}: ${label} ("${match[0]}")`);
   }
-  if (/\.(ts|mts)$/.test(file) && !/[\\/]test[\\/]/.test(rel) && NETWORK_API.test(content) && !NETWORK_ALLOWED.has(rel)) {
-    problems.push(`${rel}: opens network connections but is not in the network allowlist`);
+  if (/\.(ts|mts)$/.test(file) && !/[\\/]test[\\/]/.test(rel) && NETWORK_API.test(content)) {
+    const required = NETWORK_ALLOWED.get(rel);
+    if (!required) problems.push(`${rel}: opens network connections but is not in the network allowlist`);
+    else if (!required.test(content) || (content.match(/net\.connect\(/g) ?? []).length !== 1) problems.push(`${rel}: network use differs from its allowlisted loopback connection`);
   }
 }
 

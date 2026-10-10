@@ -15,7 +15,7 @@
  */
 "use strict";
 
-const VERSION = "4.7.0";
+const VERSION = "4.8.0";
 const BIN = "GeminiCut";
 
 function pad(n) { return String(n).padStart(2, "0"); }

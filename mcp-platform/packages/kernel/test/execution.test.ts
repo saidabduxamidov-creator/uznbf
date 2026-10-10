@@ -40,7 +40,7 @@ async function world(configInput: PlatformConfigInput = {}) {
       delete: async (k) => kvStore.delete(`${id}/${k}`),
       keys: async () => [...kvStore.keys()],
     }),
-    dataRoot: path.join(dir, "data"), artifactsRoot: path.join(dir, "artifacts"), platform: process.platform,
+    dataRoot: path.join(dir, "data"), artifactsRoot: path.join(dir, "artifacts"), platformDataDir: dir, platform: process.platform,
   });
   const queue = new JobQueue({ cpu: 2, io: 2, external: 1, host: 1, maxQueuedPerLane: 50, retentionMs: 60_000, maxRetained: 100 }, clock, bus, logger);
   const gate = new PolicyPermissionGate(config.permissions, process.platform, { record: () => undefined }, bus, logger, "config.json");

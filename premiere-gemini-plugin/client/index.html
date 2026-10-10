@@ -39,7 +39,7 @@
         <div class="logo"><svg><use href="#i-spark"/></svg></div>
         <div>
           <div class="brand-name">GeminiCut</div>
-          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.7</span></div>
+          <div class="brand-sub">IJOD UCHUN ISH MAYDONI <span class="brand-version">4.8</span></div>
         </div>
       </div>
       <div class="status">
@@ -534,6 +534,12 @@
       <section class="view" id="view-settings">
         <div class="section-heading"><div><div class="eyebrow">ISH MUHITI</div><h1>Sozlamalar</h1><p>AI kalitlari, audio eksport va til sozlamalari.</p></div></div>
         <div class="card">
+          <div class="card-heading"><h2>Claude Desktop / ChatGPT Desktop (MCP)</h2></div>
+          <label class="switch-row"><input type="checkbox" id="mcpEnabled" checked /><i class="switch"></i><em>Lokal MCP ulanishiga ruxsat berish <small>faqat shu kompyuter ichida, internetsiz</small></em></label>
+          <p class="mcp-status" id="mcpStatus">Ishga tushmoqda…</p>
+          <div class="hint">Claude Desktop yoki ChatGPT Desktop'dagi "Local MCP Platform" serveri shu panel orqali timeline'ni o'qiydi va tahrirlaydi. Panel ochiq turishi kerak.</div>
+        </div>
+        <div class="card">
           <div class="field">
             <span>Gemini API kalit <em class="opt">subtitr, montaj</em></span>
             <div class="input-group">
@@ -604,7 +610,7 @@
           <details class="log-box"><summary>Jurnal (diagnostika)</summary><pre id="log"></pre></details>
           <button class="btn ghost" id="btnClearCache">Tahlil keshini tozalash</button>
         </div>
-        <p class="about">GeminiCut <span id="ver">4.7.0</span> &middot; Premiere Pro 2022-2026</p>
+        <p class="about">GeminiCut <span id="ver">4.8.0</span> &middot; Premiere Pro 2022-2026</p>
       </section>
     </main>
 
@@ -627,6 +633,7 @@
   <script src="js/textfx-plates.js"></script>
   <script src="js/textfx-gym.js"></script>
   <script src="js/text.js"></script>
+  <script src="js/mcp-bridge.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

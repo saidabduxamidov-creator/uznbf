@@ -1039,6 +1039,7 @@ ${lines}`;
     settings: () => state.settings,
     sequence: () => state.seq,
     speechTracks: () => state.tracks.slice(),
+    audioPreset: () => resolvePreset(),
     transcript: () => (state.cache && state.cache.transcript) || null,
     saveSettings,
     log,
@@ -1048,7 +1049,7 @@ ${lines}`;
     copyText,
   };
   init();
-  ["GCLibrary", "GCNotes", "GCClaude", "GCChatGPT", "GCText"].forEach((m) => {
+  ["GCLibrary", "GCNotes", "GCClaude", "GCChatGPT", "GCText", "GCBridge"].forEach((m) => {
     try { if (window[m]) window[m].init(); } catch (e) { log(m + " ishga tushmadi: " + e.message); }
   });
   document.querySelectorAll('.tab').forEach(t => t.addEventListener('keydown', e => {

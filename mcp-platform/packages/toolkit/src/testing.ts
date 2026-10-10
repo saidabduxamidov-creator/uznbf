@@ -25,7 +25,7 @@ export interface ToolHarness {
   close(): Promise<void>;
 }
 
-export async function createToolHarness(pkg: ToolPackage<unknown>, settings: unknown = {}): Promise<ToolHarness> {
+export async function createToolHarness(pkg: ToolPackage<unknown>, settings: unknown = {}, options: { readonly platformDataDir?: string } = {}): Promise<ToolHarness> {
   const dir = await mkdtemp(path.join(os.tmpdir(), `lmp-${pkg.manifest.id}-`));
   const store = new Map<string, unknown>();
   const config = pkg.configSchema ? pkg.configSchema.parse(settings) : settings;
@@ -34,6 +34,7 @@ export async function createToolHarness(pkg: ToolPackage<unknown>, settings: unk
     config,
     logger: silentLogger,
     platform: process.platform,
+    platformDataDir: options.platformDataDir ?? path.join(dir, "platform-data"),
     services: {
       cache: { get: async () => undefined, set: async () => undefined, delete: async () => undefined },
       kv: {

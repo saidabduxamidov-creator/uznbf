@@ -126,3 +126,14 @@ tests/      node --test tests/*.test.cjs  ·     node tests/ui.e2e.cjs  (Chromiu
 ```
 
 O'rnatuvchini yig'ish: `./tools/build-installer.sh`.
+
+## Claude Desktop va ChatGPT Desktop bilan ishlash (MCP)
+Panel endi lokal MCP platformasi bilan ishlaydi: Claude Desktop yoki ChatGPT Desktop'da oddiy so'z bilan
+yozasiz — "pauzalarni kes", "3-soniyaga zoom qo'sh", "shu yerga whoosh qo'y", "CHIMGAN logotipini qo'y" —
+va ular timeline'ni shu panel orqali tahrirlaydi.
+- **Sozlamalar → Claude Desktop / ChatGPT Desktop (MCP)**: ulanish yoqilgan bo'lsa, holat qatorida
+  "Ulangan" yoki "Kutmoqda" ko'rinadi. Panel ochiq turishi kerak.
+- Hammasi faqat shu kompyuter ichida (127.0.0.1), har safar yangi maxfiy kalit bilan. Internetga hech narsa
+  chiqmaydi; Gemini bu ulanishda ishlatilmaydi.
+- Bir vaqtda ham Claude, ham ChatGPT ulanishi mumkin; amallar navbat bilan bajariladi.
+- O'chirish: shu sozlamadagi tugmani o'chiring.

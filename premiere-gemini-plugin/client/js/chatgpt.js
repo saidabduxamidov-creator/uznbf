@@ -54,38 +54,73 @@
     return c;
   }
 
+  /*
+   * Clips to grade plus per-clip frame statistics (used by the panel and the local MCP bridge).
+   * scope: "playhead" | "track" | "all". Frames are optional: without them grading still works,
+   * only per-clip auto balance is skipped.
+   */
+  async function collectTargets(scope) {
+    const r = await window.GCHost.call("gc_colorTargets", [scope], 30000);
+    const targets = r.clips;
+    const limit = 40;
+    const times = targets.slice(0, limit).map((c) => (scope === "playhead" ? Math.min(Math.max(r.playhead, c.start), c.end - 0.04) : c.start + (c.end - c.start) * 0.5));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gc-color-"));
+    const shots = [];
+    let frameError = "";
+    try {
+      const ex = await window.GCHost.call("gc_exportFrames", [path.join(dir, "c"), times], 180000);
+      for (let i = 0; i < ex.files.length; i++) {
+        try {
+          const img = await loadImage(ex.files[i]);
+          const small = toCanvas(img, 320);
+          shots.push({ i, img, stats: C().analyze(small.getContext("2d").getImageData(0, 0, small.width, small.height).data) });
+        } catch (e) { frameError = e.message; }
+      }
+    } catch (e) {
+      frameError = e.message; // kadrsiz ham rang berish mumkin (avto balanssiz)
+    } finally { fs.rm(dir, { recursive: true, force: true }, () => {}); }
+    return { targets, shots, frameError };
+  }
+
+  /* Grades every target with paramsAt(i); returns per-mode counts and errors (no UI). */
+  async function applyGrades(targets, paramsAt, method, onStatus) {
+    const done = [], errors = [], modes = { node: 0, fusion: 0, cdl: 0 }, notes = new Set();
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i];
+      if (onStatus) onStatus(`Rang qo'llanmoqda: ${i + 1}/${targets.length} · ${t.name}`, i, targets.length);
+      const p = paramsAt(i);
+      const item = { id: t.id, name: t.name, cube: C().buildCube(p, 33, "GeminiCut " + t.name), cdl: C().toCDL(p) };
+      try {
+        const r = await window.GCHost.call("gc_applyGrade", [item, { version: true, method }], 60000);
+        done.push(t.id);
+        modes[r.mode] = (modes[r.mode] || 0) + 1;
+        (r.steps || []).forEach((x) => notes.add(x));
+      } catch (e) { errors.push(`${t.name}: ${e.message}`); }
+    }
+    return { done, errors, modes, notes: Array.from(notes) };
+  }
+
+  /* Per-clip parameters: auto balance from that clip's frame (nearest analysed frame) + look. */
+  function gradeParams(shots, i, look, options) {
+    const shot = shots.length ? shots[i] || shots[Math.min(i, shots.length - 1)] : null;
+    const auto = options.auto && shot ? C().autoBalance(shot.stats, options.autoStrength) : null;
+    return C().combine(auto, look, options.clipAdjust ? options.clipAdjust[i] : undefined, options.adjust);
+  }
+
   async function capture() {
     if (S.busy) return;
     setBusy(true);
     try {
       status("Kliplar aniqlanmoqda…");
-      const r = await window.GCHost.call("gc_colorTargets", [S.scope], 30000);
-      S.targets = r.clips;
-      const limit = 40;
-      const times = S.targets.slice(0, limit).map((c) => (S.scope === "playhead" ? Math.min(Math.max(r.playhead, c.start), c.end - 0.04) : c.start + (c.end - c.start) * 0.5));
-      status(`${S.targets.length} ta klip. Kadrlar olinmoqda…`);
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gc-color-"));
-      S.shots = [];
-      let frameErr = "";
-      try {
-        const ex = await window.GCHost.call("gc_exportFrames", [path.join(dir, "c"), times], 180000);
-        for (let i = 0; i < ex.files.length; i++) {
-          try {
-            const img = await loadImage(ex.files[i]);
-            const small = toCanvas(img, 320);
-            const stats = C().analyze(small.getContext("2d").getImageData(0, 0, small.width, small.height).data);
-            S.shots.push({ i, stats, view: toCanvas(img, 640), jpeg: toCanvas(img, 512).toDataURL("image/jpeg", 0.8).split(",")[1] });
-          } catch (e) { frameErr = e.message; }
-        }
-      } catch (e) {
-        frameErr = e.message; // kadrsiz ham rang berish mumkin (avto balanssiz)
-      } finally { fs.rm(dir, { recursive: true, force: true }, () => {}); }
+      const res = await collectTargets(S.scope);
+      S.targets = res.targets;
+      S.shots = res.shots.map((s) => ({ i: s.i, stats: s.stats, view: toCanvas(s.img, 640), jpeg: toCanvas(s.img, 512).toDataURL("image/jpeg", 0.8).split(",")[1] }));
       S.preview = 0;
       renderClips();
       updatePreview();
       status(S.shots.length
         ? `${S.targets.length} ta klip tayyor. Uslub tanlang yoki ChatGPT'ga yozing.`
-        : `${S.targets.length} ta klip tanlandi, lekin kadr olinmadi (${frameErr}). Uslubni baribir qo'llash mumkin - avto balanssiz.`, !S.shots.length);
+        : `${S.targets.length} ta klip tanlandi, lekin kadr olinmadi (${res.frameError}). Uslubni baribir qo'llash mumkin - avto balanssiz.`, !S.shots.length);
     } catch (e) {
       status(e.message, true);
     } finally { setBusy(false); }
@@ -93,9 +128,7 @@
 
   /* Klip uchun yakuniy parametrlar (tahlil bo'lmagan klip - eng yaqin kadr statistikasi) */
   function paramsFor(i) {
-    const shot = S.shots.length ? S.shots[i] || S.shots[Math.min(i, S.shots.length - 1)] : null;
-    const auto = S.auto && shot ? C().autoBalance(shot.stats, S.autoStrength) : null;
-    return C().combine(auto, S.look || C().PRESETS[S.lookKey].look, S.aiClips[i], S.adj);
+    return gradeParams(S.shots, i, S.look || C().PRESETS[S.lookKey].look, { auto: S.auto, autoStrength: S.autoStrength, clipAdjust: S.aiClips, adjust: S.adj });
   }
 
   /* ---------------- oldindan ko'rish ---------------- */
@@ -239,24 +272,12 @@
     if (S.busy) return;
     if (!S.targets.length) { await capture(); if (!S.targets.length) return; }
     setBusy(true);
-    const done = [], errors = [], modes = { node: 0, fusion: 0, cdl: 0 }, notes = new Set();
     const method = $("gcMethod").value;
     try {
-      for (let i = 0; i < S.targets.length; i++) {
-        const t = S.targets[i];
-        status(`Rang qo'llanmoqda: ${i + 1}/${S.targets.length} · ${t.name}`);
-        const p = paramsFor(i);
-        const item = { id: t.id, name: t.name, cube: C().buildCube(p, 33, "GeminiCut " + t.name), cdl: C().toCDL(p) };
-        try {
-          const r = await window.GCHost.call("gc_applyGrade", [item, { version: true, method }], 60000);
-          done.push(t.id);
-          modes[r.mode] = (modes[r.mode] || 0) + 1;
-          (r.steps || []).forEach((x) => notes.add(x));
-        } catch (e) { errors.push(`${t.name}: ${e.message}`); }
-      }
+      const { done, errors, modes, notes } = await applyGrades(S.targets, paramsFor, method, (t) => status(t));
       S.applied = done;
       const how = [modes.node && `${modes.node} ta Color sahifasida ("GeminiCut AI" versiyasi)`, modes.fusion && `${modes.fusion} ta Fusion LUT orqali (Edit sahifasida ko'rinadi)`, modes.cdl && `${modes.cdl} ta CDL`].filter(Boolean).join(", ");
-      window.GCApplication.log && window.GCApplication.log("Rang: " + how + (notes.size ? " | " + Array.from(notes).join("; ") : ""));
+      window.GCApplication.log && window.GCApplication.log("Rang: " + how + (notes.length ? " | " + notes.join("; ") : ""));
       status(done.length
         ? `✓ ${done.length} ta klipga rang berildi: ${how}.` + (errors.length ? " Xatolar: " + errors.join("; ") : "") + (modes.node ? " Timeline'da ko'rinmasa: Usul → Fusion." : "")
         : "Rang qo'llanmadi: " + errors.join("; "), !done.length);
@@ -326,5 +347,5 @@
     $("gpModelChip").textContent = m || "GPT · avto";
   }
 
-  window.GCChatGPT = { init, capture, apply, revert, state: S, setMode };
+  window.GCChatGPT = { init, capture, apply, revert, state: S, setMode, collectTargets, applyGrades, gradeParams };
 })();

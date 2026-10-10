@@ -204,7 +204,7 @@
 
   const hostApp = () => window.GCHost.app || (document.body.classList.contains("resolve") ? "resolve" : "ppro");
   /* AE va Resolve: shablon muharrirning o'z qatlamlari / Fusion vositalari bilan quriladi */
-  const useNative = () => (hostApp() === "ae" || hostApp() === "resolve") && mode === "native" && T().nativeSupported(R, hostApp());
+  const useNative = (rec = R, insertMode = mode) => (hostApp() === "ae" || hostApp() === "resolve") && insertMode === "native" && T().nativeSupported(rec, hostApp());
 
   function pngSize(file) {
     try {
@@ -214,14 +214,14 @@
     return null;
   }
 
-  function nativeSpecFor(W, H) {
-    const spec = T().nativeSpec(R);
-    spec.W = W; spec.H = H; spec.recipe = Object.assign({}, R);
+  function nativeSpecFor(W, H, rec = R) {
+    const spec = T().nativeSpec(rec);
+    spec.W = W; spec.H = H; spec.recipe = Object.assign({}, rec);
     if (spec.logo) {
       spec.logo = T().assetPath(spec.logo);
       spec.img = pngSize(spec.logo);
     } else {
-      const m = T().nativeMeasure(R, W, H);
+      const m = T().nativeMeasure(rec, W, H);
       if (m) { spec.size = m.size; spec.box = m.box; }
     }
     return spec;
@@ -247,43 +247,58 @@
     el.textContent = t;
   }
 
+  /*
+   * Puts a recipe on the timeline (used by the panel button and by the local MCP bridge).
+   * opts: { editing, insertMode: "native" | "png", token, onProgress(i, total), onStatus(text) }
+   * Returns { track, seconds, mode: "native" | "png", layers?, frames?, reason?, message }.
+   */
+  async function place(rec, opts = {}) {
+    const tpl = T().byId(rec.template);
+    if (tpl.custom && !rec.logo) throw new Error("Avval logo PNG faylini yuklang.");
+    if (!tpl.noText && !String(rec.text || "").trim()) throw new Error("Matnni yozing.");
+    if (!window.GCHost.available) throw new Error("Panel muharrir ichida ochilishi kerak.");
+    const say = opts.onStatus || (() => undefined);
+    const editingTarget = opts.editing || null;
+    let seq = window.GCApplication.sequence();
+    if (!seq || !seq.width) seq = await window.GCHost.call("gc_getSequenceInfo", [], 20000);
+    const W = seq.width || 1920, H = seq.height || 1080, fps = seq.fps || 25;
+    const ae = hostApp() === "ae", native = useNative(rec, opts.insertMode || mode);
+    const where = (r) => `${ae ? "qatlam #" + (r.track + 1) : "V" + (r.track + 1)}, ${window.GCSubs.formatClock(r.seconds)}`;
+    const what = tpl.logo ? "Logo" : "Matn", done = editingTarget ? what + " yangilandi" : what + " qo'yildi";
+    if (native && ae) { // AE: render kerak emas - qatlamlar to'g'ridan-to'g'ri
+      say("After Effects qatlamlari yaratilmoqda…");
+      const r = await window.GCHost.call("gc_insertNative", [nativeSpecFor(W, H, rec), -1, editingTarget], 120000);
+      return { track: r.track, seconds: r.seconds, mode: "native", layers: r.layers,
+        message: `✓ ${done}: ${where(r)} - ${r.layers} ta qatlam. Endi uni After Effects'ning o'zida tahrirlash mumkin.` };
+    }
+    const dir = path.join(ROOT(), `${stamp()}_${rec.template}_${slug(rec.text)}`);
+    const n = Math.max(1, Math.round(rec.duration * fps));
+    say(`Kadrlar chizilmoqda… 0/${n}`);
+    const out = await T().render(rec, dir, { width: W, height: H, fps, token: opts.token,
+      onProgress: (i, total) => { if (opts.onProgress) opts.onProgress(i, total); say(`Kadrlar chizilmoqda… ${i}/${total}`); } });
+    say("Timeline'ga qo'yilmoqda…");
+    const name = tpl.logo ? `Logo 3D · ${tpl.custom ? path.basename(rec.logo) : tpl.name}` : `Matn · ${tpl.name} · ${String(rec.text).split(/\n/)[0].slice(0, 24)}`;
+    if (native) { // Resolve: PNG zaxira klipi + Fusion (Text+ / 3D)
+      const r = await window.GCHost.call("gc_insertNative", [nativeSpecFor(W, H, rec), out.first, out.count, fps, -1, editingTarget, name], 180000);
+      return { track: r.track, seconds: r.seconds, mode: r.mode, frames: out.count, ...(r.reason ? { reason: r.reason } : {}),
+        message: r.mode === "native"
+          ? `✓ ${done}: ${where(r)}. Fusion sahifasida tahrirlanadi (${tpl.logo ? "GCLogo3D" : "GCMatn"}).`
+          : `✓ ${done} (kadrlar): ${where(r)}. Fusion qurilmadi: ${r.reason}` };
+    }
+    const r = await window.GCHost.call("gc_importSequence", [out.first, out.count, fps, -1, editingTarget, name], 180000);
+    return { track: r.track, seconds: r.seconds, mode: "png", frames: out.count, message: `✓ ${done}: ${where(r)} (${out.count} kadr).` };
+  }
+
   async function insert() {
     if (busy) return;
-    const tpl = T().byId(R.template);
-    if (tpl.custom && !R.logo) return status("Avval logo PNG faylini yuklang.", true);
-    if (!tpl.noText && !String(R.text || "").trim()) return status("Matnni yozing.", true);
-    if (!window.GCHost.available) return status("Panel muharrir ichida ochilishi kerak.", true);
     busy = true; token = window.GCGemini.createCancelToken();
     setBusy(true);
     try {
-      let seq = window.GCApplication.sequence();
-      if (!seq || !seq.width) seq = await window.GCHost.call("gc_getSequenceInfo", [], 20000);
-      const W = seq.width || 1920, H = seq.height || 1080, fps = seq.fps || 25;
-      const ae = hostApp() === "ae", native = useNative();
-      const where = (r) => `${ae ? "qatlam #" + (r.track + 1) : "V" + (r.track + 1)}, ${window.GCSubs.formatClock(r.seconds)}`;
-      const what = tpl.logo ? "Logo" : "Matn", done = editing ? what + " yangilandi" : what + " qo'yildi";
-      if (native && ae) { // AE: render kerak emas - qatlamlar to'g'ridan-to'g'ri
-        status("After Effects qatlamlari yaratilmoqda…");
-        const r = await window.GCHost.call("gc_insertNative", [nativeSpecFor(W, H), -1, editing], 120000);
-        status(`✓ ${done}: ${where(r)} - ${r.layers} ta qatlam. Endi uni After Effects'ning o'zida tahrirlash mumkin.`);
-      } else {
-        const dir = path.join(ROOT(), `${stamp()}_${R.template}_${slug(R.text)}`);
-        const n = Math.max(1, Math.round(R.duration * fps));
-        status(`Kadrlar chizilmoqda… 0/${n}`);
-        const out = await T().render(R, dir, { width: W, height: H, fps, token,
-          onProgress: (i, total) => { $("txBar").style.width = Math.round((i / total) * 100) + "%"; $("txProgLabel").textContent = `${i}/${total}`; status(`Kadrlar chizilmoqda… ${i}/${total}`); } });
-        status("Timeline'ga qo'yilmoqda…");
-        const name = tpl.logo ? `Logo 3D · ${tpl.custom ? require("path").basename(R.logo) : tpl.name}` : `Matn · ${tpl.name} · ${String(R.text).split(/\n/)[0].slice(0, 24)}`;
-        if (native) { // Resolve: PNG zaxira klipi + Fusion (Text+ / 3D)
-          const r = await window.GCHost.call("gc_insertNative", [nativeSpecFor(W, H), out.first, out.count, fps, -1, editing, name], 180000);
-          status(r.mode === "native"
-            ? `✓ ${done}: ${where(r)}. Fusion sahifasida tahrirlanadi (${tpl.logo ? "GCLogo3D" : "GCMatn"}).`
-            : `✓ ${done} (kadrlar): ${where(r)}. Fusion qurilmadi: ${r.reason}`, r.mode !== "native");
-        } else {
-          const r = await window.GCHost.call("gc_importSequence", [out.first, out.count, fps, -1, editing, name], 180000);
-          status(`✓ ${done}: ${where(r)} (${out.count} kadr).`);
-        }
-      }
+      const r = await place(R, {
+        editing, insertMode: mode, token, onStatus: (t) => status(t),
+        onProgress: (i, total) => { $("txBar").style.width = Math.round((i / total) * 100) + "%"; $("txProgLabel").textContent = `${i}/${total}`; },
+      });
+      status(r.message, r.mode === "png" && !!r.reason);
       stopEditing();
       window.GCApplication.timelineChanged();
     } catch (e) {
@@ -404,5 +419,11 @@
     requestAnimationFrame(tick);
   }
 
-  window.GCText = { init, recipe: () => R, setRecipe: (r) => { R = Object.assign({}, T().DEFAULT, r); syncControls(); }, insert, editAtPlayhead, setKind };
+  window.GCText = {
+    init, recipe: () => R, setRecipe: (r) => { R = Object.assign({}, T().DEFAULT, r); syncControls(); }, insert, editAtPlayhead, setKind,
+    /* Used by the local MCP bridge: full recipe from a template id + overrides, then place it. */
+    recipeFor: (template, overrides) => Object.assign(T().recipeFor(template), overrides || {}),
+    place,
+    templates: () => T().TEMPLATES.map((t) => ({ id: t.id, kind: t.kind, name: t.name, description: t.desc, logo: !!t.logo, noText: !!t.noText })),
+  };
 })();

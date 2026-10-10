@@ -12,7 +12,7 @@
  * Barcha vaqtlar - kompozitsiya soniyalarida.
  */
 
-var GC_VERSION = "4.7.0";
+var GC_VERSION = "4.8.0";
 var GC_LAST_COMP_ID = 0;
 
 /* ======================= yordamchilar ======================= */

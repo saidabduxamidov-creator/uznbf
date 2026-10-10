@@ -21,6 +21,9 @@
     },
     {
       "path": "packages/tools/video"
+    },
+    {
+      "path": "packages/tools/editor"
     }
   ]
 }

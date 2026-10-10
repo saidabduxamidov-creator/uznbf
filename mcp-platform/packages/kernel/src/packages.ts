@@ -66,6 +66,7 @@ export interface PackageManagerDeps {
   readonly kvFor: (packageId: string) => KeyValueStore;
   readonly dataRoot: string;
   readonly artifactsRoot: string;
+  readonly platformDataDir: string;
   readonly platform: NodeJS.Platform;
 }
 
@@ -227,6 +228,7 @@ export class PackageManager {
             config: settings,
             logger: pkgLogger,
             platform: this.deps.platform,
+            platformDataDir: this.deps.platformDataDir,
             services: { cache: this.deps.cacheFor(manifest.id), kv: this.deps.kvFor(manifest.id), dataDir, artifactsDir },
           }),
         ),

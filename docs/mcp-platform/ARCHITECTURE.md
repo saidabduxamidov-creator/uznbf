@@ -182,14 +182,34 @@ objects (a tool without `fs.write` never receives a writable file service).
 Premiere can only be scripted from inside Premiere (P3). The existing panels therefore become
 **bridge agents**:
 
-1. When a panel opens, it starts a WebSocket listener on `127.0.0.1` with a random port and a
-   random 256-bit token. It writes `{host, port, token, pid, version}` to a per-user discovery file
-   (`%LOCALAPPDATA%\<product>\bridges\<host>.json`, user-only ACL).
-2. The MCP server reads the discovery file and connects. Every message is
-   `{id, method, params, token}`, and only methods on an explicit allowlist (the existing `gc_*`
-   contract) are accepted. Results are returned exactly as `gc_*` returns them today.
-3. Several clients may connect at the same time (ChatGPT and Claude each run their own server
-   process). The agent serializes host calls, because ExtendScript is single-threaded.
+1. When a panel opens, its agent (`client/js/mcp-bridge.js`, shared by all three panels) listens
+   on **127.0.0.1 only**, on a random port, with a random 256-bit token. It writes
+   `{protocol, host, port, token, pid, panelVersion}` atomically to
+   `<platform data dir>\bridges\<host>.json` (`%LOCALAPPDATA%\LocalMcpPlatform\bridges` on Windows).
+   It removes the file when the panel closes; stale files are ignored by a pid check.
+2. **Protocol 1 is newline-delimited JSON over TCP.** WebSocket was replaced because the CEP and
+   Resolve panels then need no third-party code: Node's `net` module is built into all three hosts.
+   - The first message is `hello` with the token, compared in constant time. Anything else closes
+     the connection.
+   - Each `call {id, method, args, timeoutMs}` gets one `result {id, ok, data | error, code}`.
+     `cancel {id}` drops a queued call; for a running call, the result is discarded.
+3. **Allowlist.** Two kinds of methods can be called:
+   - the existing `gc_*` host functions, passed through unchanged;
+   - a few `panel.*` operations implemented with the panel's own modules: motion presets, sound
+     library, text/logo templates (`GCText.place`), audio export with the panel's preset logic, and
+     colour grading (`GCChatGPT.collectTargets/applyGrades`).
+
+   Those panel functions were extracted from the UI code, so the panel buttons and MCP run the same
+   code.
+4. **One call at a time.** Several clients may connect simultaneously (Claude and ChatGPT each start
+   their own server process). The agent runs calls one at a time, because host scripting is
+   single-threaded.
+5. **Server side** (`editor` tool package):
+   - Connections are pooled per host and authenticated.
+   - A panel restart is handled transparently: a call that was never sent is retried once. An edit
+     that may already have run is never repeated.
+   - Client cancellation sends `cancel`.
+   - The guard script allows exactly one loopback `net.connect` in the codebase.
 
 Why the panel listens instead of the server: the panel's lifetime defines when the host is usable,
 two independent server processes can share one bridge, and no long-lived daemon is needed.
@@ -445,7 +465,7 @@ then they are renamed and their API tabs are removed (decision D3).
 | 5.1 | `@lmp/kernel`: paths, DI, events, logging, config, cache, queue, permissions, SQLite repositories, metrics, registry, package discovery, executor | Done, tested |
 | 5.2 | `@lmp/server`: MCP adapter (stdio), built-in `platform` package, composition root, CLI | Done; end-to-end tested with the official SDK client |
 | 5.3 | `@lmp/toolkit` (safe process runner with tree kill, binary discovery, path safety, atomic writes, FFmpeg helpers, test harness) and the fs (9 tools), ffmpeg (4 tools, preset-only transcoding) and video (4 tools) packages | Done; tested against real FFmpeg, including the full MCP stack |
-| 5.4 | Host bridge protocol and agents (Premiere, After Effects, Resolve) | Next |
-| 5.5 | motion, timeline, subtitles (whisper.cpp) | Planned |
+| 5.4 | Panel bridge agent (one file for all three panels, settings toggle and status) and the `editor` package (22 tools: timeline, selection, frames, cuts, zooms, keyframes, motion presets, sound effects, audio import/export, subtitles, text/3D logo templates, Resolve colour grading) | Done; tested with the real agent and real `host.jsx` on the Premiere/AE mocks, plus the full MCP client → server → panel chain |
+| 5.5 | motion planning, timeline builder, subtitles (whisper.cpp) | Next |
 | 5.6 | clipboard, database, terminal | Planned |
 | 5.7 | ocr, browser, blender, photoshop | Planned |

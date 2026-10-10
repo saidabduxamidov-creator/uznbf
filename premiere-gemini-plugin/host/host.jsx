@@ -12,7 +12,7 @@
  * Barcha vaqtlar - sequence (timeline) soniyalarida, aks holda aytiladi.
  */
 
-var GC_VERSION = "4.7.0";
+var GC_VERSION = "4.8.0";
 var GC_TICKS = 254016000000;
 
 /* ======================= yordamchi funksiyalar ======================= */

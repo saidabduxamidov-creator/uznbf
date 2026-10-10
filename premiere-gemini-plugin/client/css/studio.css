@@ -276,3 +276,6 @@ body.ae [data-host]:not([data-host~="ae"]) {display:none !important;}
 .tx-mode {margin-bottom:10px;}
 .tx-mode .segmented {width:100%;}
 .tx-actions .hint {font-size:11px;color:var(--faint);line-height:1.45;margin:6px 0 10px;}
+.mcp-status {margin:10px 0 6px;font-size:12px;color:var(--muted);}
+.mcp-status.ok {color:var(--teal);}
+.mcp-status.ok::before {content:"● ";}
