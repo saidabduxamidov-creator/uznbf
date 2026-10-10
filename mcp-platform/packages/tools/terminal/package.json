@@ -1,0 +1,19 @@
+{
+  "name": "@lmp/tool-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Runs allow-listed local programs without a shell.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "lmpTool": {
+    "id": "terminal",
+    "entry": "dist/src/index.js"
+  },
+  "dependencies": {
+    "@lmp/core": "0.1.0",
+    "@lmp/toolkit": "0.1.0",
+    "zod": "4.6.5"
+  }
+}

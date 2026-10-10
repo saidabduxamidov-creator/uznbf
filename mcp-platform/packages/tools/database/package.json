@@ -1,0 +1,19 @@
+{
+  "name": "@lmp/tool-database",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Query local SQLite databases and keep project notes.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "lmpTool": {
+    "id": "database",
+    "entry": "dist/src/index.js"
+  },
+  "dependencies": {
+    "@lmp/core": "0.1.0",
+    "@lmp/toolkit": "0.1.0",
+    "zod": "4.6.5"
+  }
+}

@@ -37,6 +37,9 @@ Built-in tool packages:
 | `subtitles` | `models`, `transcribe` (offline, whisper.cpp), `read`, `write`, `reformat` |
 | `timeline` | `build_edit` (FCP7 XML / EDL), `render_rough_cut` |
 | `motion` | `plan_zooms`, `keyframes`, `ken_burns`, `shake` |
+| `clipboard` | `read_text`, `write_text`, `read_image`, `write_image`, `read_files`, `write_files` |
+| `database` | `schema`, `query`, `execute`, `note_save`, `note_get`, `note_list`, `note_delete` |
+| `terminal` | `programs`, `run` (allow-listed programs, no shell; `terminal.exec` is denied until you allow it) |
 
 The `editor` package drives Premiere Pro, After Effects and DaVinci Resolve through the panel's
 bridge agent. The panel must be open, with the MCP option enabled in its Settings.

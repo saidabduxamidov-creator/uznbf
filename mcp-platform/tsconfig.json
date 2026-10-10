@@ -33,6 +33,15 @@
     },
     {
       "path": "packages/tools/motion"
+    },
+    {
+      "path": "packages/tools/clipboard"
+    },
+    {
+      "path": "packages/tools/database"
+    },
+    {
+      "path": "packages/tools/terminal"
     }
   ]
 }

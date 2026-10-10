@@ -19,15 +19,22 @@ export interface RunProcessOptions {
   readonly onStderrLine?: (line: string) => void;
   /** Data written to stdin, which is then closed. */
   readonly input?: string | Buffer;
-  /** Exit codes treated as success (default [0]). */
-  readonly okExitCodes?: readonly number[];
+  /** Exit codes treated as success (default [0]); "any" returns every exit code as a result. */
+  readonly okExitCodes?: readonly number[] | "any";
   /** Short label used in error messages (defaults to the executable name). */
   readonly label?: string;
+  /**
+   * Do not connect stdout/stderr. Needed for programs that leave a background child holding the
+   * inherited pipes (xclip serving the X selection), which would otherwise never report "close".
+   */
+  readonly ignoreOutput?: boolean;
 }
 
 export interface ProcessResult {
   readonly exitCode: number;
   readonly stdout: string;
+  /** Raw stdout bytes (for binary output such as images). */
+  readonly stdoutBytes: Buffer;
   readonly stderr: string;
   readonly stdoutTruncated: boolean;
   readonly stderrTruncated: boolean;
@@ -68,8 +75,12 @@ class BoundedBuffer {
     this.partial = "";
   }
 
+  bytes(): Buffer {
+    return Buffer.concat(this.chunks);
+  }
+
   text(): string {
-    return Buffer.concat(this.chunks).toString("utf8");
+    return this.bytes().toString("utf8");
   }
 
   private emit(line: string): void {
@@ -95,7 +106,7 @@ export function runProcess(executable: string, args: readonly string[], options:
         shell: false,
         windowsHide: true,
         detached: process.platform !== "win32",
-        stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+        stdio: [options.input === undefined ? "ignore" : "pipe", options.ignoreOutput ? "ignore" : "pipe", options.ignoreOutput ? "ignore" : "pipe"],
       });
     } catch (error) {
       reject(spawnError(error, executable, label));
@@ -129,15 +140,18 @@ export function runProcess(executable: string, args: readonly string[], options:
           return;
         }
         const exitCode = code ?? (killedBy ? 128 : -1);
+        const stdoutBytes = out.bytes();
         const result: ProcessResult = {
           exitCode,
-          stdout: out.text(),
+          stdout: stdoutBytes.toString("utf8"),
+          stdoutBytes,
           stderr: err.text(),
           stdoutTruncated: out.truncated,
           stderrTruncated: err.truncated,
           durationMs: Math.round(performance.now() - started),
         };
-        if (!(options.okExitCodes ?? [0]).includes(exitCode)) {
+        const ok = options.okExitCodes ?? [0];
+        if (ok !== "any" && !ok.includes(exitCode)) {
           reject(
             new ExternalProcessError(`${label} failed (exit code ${exitCode}): ${lastLines(result.stderr || result.stdout, 6)}`, {
               details: { executable, exitCode, stderr: lastLines(result.stderr, 40) },
