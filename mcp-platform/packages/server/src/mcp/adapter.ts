@@ -20,7 +20,6 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { PRODUCT, type CapabilityRequest, type ClientIdentity, type ContentPart, type Logger, type ProgressReport } from "@lmp/core";
 import type { ExecutionOutcome, ToolExecutor, ToolRegistry } from "@lmp/kernel";
-import { z } from "zod";
 import { identifyClient } from "./client-identity.js";
 import { ProgressForwarder } from "./progress.js";
 
@@ -111,6 +110,7 @@ export class McpAdapter {
           ...(forwarder ? { onProgress: (r: ProgressReport) => forwarder.report(r) } : {}),
           ...(this.server.getClientCapabilities()?.elicitation ? { consent: (message: string, req: CapabilityRequest) => this.askConsent(message, req, extra.signal) } : {}),
         });
+        await forwarder?.drain();
         return toCallToolResult(outcome);
       } finally {
         forwarder?.close();
@@ -143,7 +143,7 @@ export class McpAdapter {
         arguments: Object.entries(p.definition.arguments.shape).map(([name, schema]) => ({
           name,
           ...(schema.description ? { description: schema.description } : {}),
-          required: !(schema instanceof z.ZodOptional),
+          required: !schema.safeParse(undefined).success,
         })),
       })),
     }));

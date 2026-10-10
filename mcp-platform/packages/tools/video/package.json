@@ -1,0 +1,19 @@
+{
+  "name": "@lmp/tool-video",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Silence, scene, loudness and contact-sheet analysis of local media with FFmpeg.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "lmpTool": {
+    "id": "video",
+    "entry": "dist/src/index.js"
+  },
+  "dependencies": {
+    "@lmp/core": "0.1.0",
+    "@lmp/toolkit": "0.1.0",
+    "zod": "4.6.5"
+  }
+}

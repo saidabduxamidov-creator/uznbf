@@ -1,8 +1,26 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/core" },
-    { "path": "packages/kernel" },
-    { "path": "packages/server" }
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/toolkit"
+    },
+    {
+      "path": "packages/kernel"
+    },
+    {
+      "path": "packages/server"
+    },
+    {
+      "path": "packages/tools/fs"
+    },
+    {
+      "path": "packages/tools/ffmpeg"
+    },
+    {
+      "path": "packages/tools/video"
+    }
   ]
 }

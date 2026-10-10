@@ -444,8 +444,8 @@ then they are renamed and their API tabs are removed (decision D3).
 | 5.1 | `@lmp/core`: contracts, errors, capabilities, ports, tool and package API | Done, tested |
 | 5.1 | `@lmp/kernel`: paths, DI, events, logging, config, cache, queue, permissions, SQLite repositories, metrics, registry, package discovery, executor | Done, tested |
 | 5.2 | `@lmp/server`: MCP adapter (stdio), built-in `platform` package, composition root, CLI | Done; end-to-end tested with the official SDK client |
-| 5.3 | fs, ffmpeg, video-analysis tool packages | Next |
-| 5.4 | Host bridge protocol and agents (Premiere, After Effects, Resolve) | Planned |
+| 5.3 | `@lmp/toolkit` (safe process runner with tree kill, binary discovery, path safety, atomic writes, FFmpeg helpers, test harness) and the fs (9 tools), ffmpeg (4 tools, preset-only transcoding) and video (4 tools) packages | Done; tested against real FFmpeg, including the full MCP stack |
+| 5.4 | Host bridge protocol and agents (Premiere, After Effects, Resolve) | Next |
 | 5.5 | motion, timeline, subtitles (whisper.cpp) | Planned |
 | 5.6 | clipboard, database, terminal | Planned |
 | 5.7 | ocr, browser, blender, photoshop | Planned |

@@ -12,6 +12,8 @@ export class ProgressForwarder {
   private pending: ProgressReport | undefined;
   private timer: NodeJS.Timeout | undefined;
   private closed = false;
+  /** Notifications are sent in order; the result must not overtake them. */
+  private inflight: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly token: string | number,
@@ -39,7 +41,23 @@ export class ProgressForwarder {
     }
   }
 
-  /** Stops forwarding; must be called when the request completes. */
+  /**
+   * Sends a throttled pending update, waits (bounded) until every notification is written, then
+   * closes. Call before returning the result so the final progress is not overtaken by it.
+   */
+  async drain(timeoutMs = 1000): Promise<void> {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+    const pending = this.pending;
+    this.pending = undefined;
+    if (pending && !this.closed) this.flushNow(pending, Date.now());
+    this.closed = true;
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([this.inflight, new Promise<void>((resolve) => { timer = setTimeout(resolve, timeoutMs); })]);
+    if (timer) clearTimeout(timer);
+  }
+
+  /** Stops forwarding immediately. */
   close(): void {
     this.closed = true;
     if (this.timer) clearTimeout(this.timer);
@@ -52,11 +70,12 @@ export class ProgressForwarder {
     this.last = report.progress;
     this.lastSentAt = now;
     this.pending = undefined;
-    this.send({
+    const params = {
       progressToken: this.token,
       progress: report.progress,
       ...(report.total !== undefined ? { total: report.total } : {}),
       ...(report.message !== undefined ? { message: report.message.slice(0, 500) } : {}),
-    }).catch(this.onError);
+    };
+    this.inflight = this.inflight.then(() => this.send(params)).catch(this.onError);
   }
 }

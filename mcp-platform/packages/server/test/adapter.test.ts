@@ -41,6 +41,7 @@ describe("progress forwarder", () => {
     f.report({ progress: 0.5, total: 10 });
     for (let i = 2; i <= 9; i++) f.report({ progress: i, total: 10 });
     f.report({ progress: 10, total: 10 });
+    await new Promise((r) => setImmediate(r));
     assert.deepEqual(sent, [1, 10], "intermediate updates throttled, final immediate");
     f.report({ progress: 11 });
     await new Promise((r) => setTimeout(r, 80));
@@ -49,5 +50,17 @@ describe("progress forwarder", () => {
     f.report({ progress: 12 });
     await new Promise((r) => setTimeout(r, 80));
     assert.deepEqual(sent, [1, 10, 11], "closed forwarder sends nothing");
+  });
+
+  it("drain delivers the throttled last update and waits for in-flight sends", async () => {
+    const sent: number[] = [];
+    const f = new ProgressForwarder("tok", async (p) => {
+      await new Promise((r) => setTimeout(r, 20));
+      sent.push(p.progress);
+    }, () => undefined, 1000);
+    f.report({ progress: 1 });
+    f.report({ progress: 2 });
+    await f.drain();
+    assert.deepEqual(sent, [1, 2], "pending update sent and awaited before the result");
   });
 });

@@ -1,0 +1,19 @@
+{
+  "name": "@lmp/tool-ffmpeg",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Probe media, extract audio and frames, and transcode with safe presets using the local FFmpeg.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "lmpTool": {
+    "id": "ffmpeg",
+    "entry": "dist/src/index.js"
+  },
+  "dependencies": {
+    "@lmp/core": "0.1.0",
+    "@lmp/toolkit": "0.1.0",
+    "zod": "4.6.5"
+  }
+}

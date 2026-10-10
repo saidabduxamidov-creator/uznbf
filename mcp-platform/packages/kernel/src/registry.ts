@@ -48,7 +48,8 @@ export class ToolRegistry {
     if (!TOOL_NAME_PATTERN.test(definition.name)) throw new ValidationError(`Invalid tool name "${definition.name}"`);
     if (!definition.name.startsWith(`${pkg.id}.`)) throw new ValidationError(`Tool "${definition.name}" must be namespaced under "${pkg.id}."`);
     if (this.tools.has(definition.name)) throw new ValidationError(`Duplicate tool "${definition.name}"`);
-    if (!(definition.input instanceof z.ZodObject)) throw new ValidationError(`Tool "${definition.name}" input must be a zod object`);
+    if (!isZodObject(definition.input)) throw new ValidationError(`Tool "${definition.name}" input must be a zod object schema`);
+    if (definition.output !== undefined && !isZodObject(definition.output)) throw new ValidationError(`Tool "${definition.name}" output must be a zod object schema`);
     if (definition.execution.longRunning && definition.output) {
       // A long-running call may answer with a job reference, which could not satisfy the schema.
       throw new ValidationError(`Long-running tool "${definition.name}" cannot declare an output schema; return structured data from the job result instead`);
@@ -112,6 +113,15 @@ export class ToolRegistry {
   listResources(): RegisteredResource[] {
     return [...this.resources.values()].sort((a, b) => a.definition.uri.localeCompare(b.definition.uri));
   }
+}
+
+/**
+ * Structural check instead of `instanceof`: tool packages may resolve their own copy of zod (same
+ * major version), which would fail an identity check against the kernel's copy.
+ */
+export function isZodObject(value: unknown): value is z.ZodObject {
+  const internals = (value as { _zod?: { def?: { type?: unknown } } } | null)?._zod;
+  return typeof (value as { safeParse?: unknown } | null)?.safeParse === "function" && internals?.def?.type === "object";
 }
 
 function toJsonSchema(schema: z.ZodType, io: "input" | "output", tool: string): Record<string, unknown> {

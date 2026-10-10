@@ -20,9 +20,22 @@ Architecture, decisions and implementation status: [`../docs/mcp-platform/ARCHIT
 | Package | Role |
 |---|---|
 | `packages/core` | Domain contracts: tools, packages, errors, capabilities, ports. No infrastructure. |
+| `packages/toolkit` | Shared building blocks for tool packages: process runner without a shell (kills the whole process tree on cancel), binary discovery (configured path, then `LMP_BIN_DIR`, then PATH), path safety, atomic writes, FFmpeg helpers, test harness. |
 | `packages/kernel` | Infrastructure behind the ports: DI, config, logging, events, cache, queue, permissions, SQLite, metrics, registry, package discovery, executor. |
 | `packages/server` | MCP adapter (the only SDK user), built-in `platform` package, composition root, CLI. |
 | `packages/tools/*` | Tool packages. They are discovered at startup; adding one never changes existing code. |
+
+Built-in tool packages:
+
+| Package | Tools |
+|---|---|
+| `fs` | `list_directory`, `stat`, `read_text`, `read_image`, `write_text`, `make_directory`, `move`, `find`, `hash` |
+| `ffmpeg` | `probe`, `extract_frames`, `extract_audio`, `transcode` |
+| `video` | `detect_silence`, `detect_scenes`, `loudness`, `contact_sheet` |
+
+The `fs` package checks every path against the local permission policy. `ffmpeg.extract_frames` and
+`video.contact_sheet` return images that the assistant looks at itself. `ffmpeg.transcode` accepts
+only named presets, never raw arguments.
 | `scripts/guard.mjs` | Build guard. Fails on AI-provider SDKs or endpoints, any Google AI/Flow/Veo reference, unapproved network code, and dependencies with install scripts. |
 
 ## Requirements
