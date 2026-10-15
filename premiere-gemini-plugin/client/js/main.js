@@ -41,7 +41,8 @@
       srcLang: "auto", outLang: "same", maxChars: 42, maxLines: 2, range: "all", glossary: "",
       letterCase: "original", punctuation: "keep", autoCaption: false, pauses: true, pause: 0.8, retakes: true, zoom: false, zoomPower: 115, presetPath: "",
       punct: { comma: true, period: true, excl: true, colon: true, quotes: true, apos: true, dash: true, ellipsis: true },
-      claudeKey: "", textAI: "auto", keyBase: "media", motionStrength: 115, openaiKey: "", openaiModel: "" };
+      claudeKey: "", textAI: "auto", keyBase: "media", motionStrength: 115, openaiKey: "", openaiToken: "", openaiModel: "",
+      claudeToken: "", geminiToken: "", geminiKey: "" };
     let s = def;
     try { s = Object.assign(def, JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}")); } catch (e) { /* standart */ }
     // 3.2 dagi "punctuation: remove" -> yangi format

@@ -113,6 +113,22 @@
       const result = await window.GCChatGPT.applyGrades(targets, (i) => window.GCChatGPT.gradeParams(shots, i, look, options), args.method || "auto");
       return { clips: targets.length, graded: result.done.length, modes: result.modes, errors: result.errors, notes: result.notes, analysedFrames: shots.length, frameError };
     },
+    "panel.aiStatus": async () => {
+      const settings = window.GCApplication.settings();
+      return {
+        chatgpt: { authenticated: !!settings.openaiToken, type: "oauth", hasLegacyKey: !!settings.openaiKey },
+        claude: { authenticated: !!settings.claudeKey, type: "api-key" },
+        gemini: { authenticated: !!settings.geminiKey, type: "api-key" },
+      };
+    },
+    "panel.disconnect": async (args) => {
+      const settings = window.GCApplication.settings();
+      if (args.provider === "chatgpt") settings.openaiToken = null;
+      if (args.provider === "claude") settings.claudeKey = null;
+      if (args.provider === "gemini") settings.geminiKey = null;
+      window.GCApplication.saveSettings && window.GCApplication.saveSettings();
+      return { disconnected: args.provider };
+    },
   };
 
   /* ---------------- protocol ---------------- */
