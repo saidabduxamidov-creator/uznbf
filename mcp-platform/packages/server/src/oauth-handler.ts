@@ -60,7 +60,7 @@ export class OAuthHandler {
 
       this.server.listen(port, "127.0.0.1", () => {
         const address = this.server!.address();
-        if (typeof address === "object" && address.port) {
+        if (address && typeof address === "object" && "port" in address && address.port) {
           const url = `http://127.0.0.1:${address.port}`;
           this.logger?.info?.(`OAuth handler listening on ${url}`);
           resolve({ port: address.port, url });
@@ -107,7 +107,7 @@ export class OAuthHandler {
   /**
    * Initiate ChatGPT OAuth flow (PKCE)
    */
-  private handleChatGPTAuthorize(req: any, res: any, query: any): void {
+  private handleChatGPTAuthorize(_req: any, res: any, _query: any): void {
     if (!this.config.chatgpt) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "ChatGPT not configured" }));
@@ -147,7 +147,7 @@ export class OAuthHandler {
   /**
    * Handle ChatGPT OAuth callback
    */
-  private async handleChatGPTCallback(req: any, res: any, query: any): Promise<void> {
+  private async handleChatGPTCallback(_req: any, res: any, query: any): Promise<void> {
     const { code, state, error } = query;
 
     if (error) {
@@ -201,7 +201,7 @@ export class OAuthHandler {
 
       this.logger?.info?.("ChatGPT OAuth successful");
     } catch (e) {
-      this.logger?.error?.("Token exchange failed", e);
+      this.logger?.error?.("Token exchange failed", { error: String(e) });
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Token exchange failed", details: String(e) }));
     }
@@ -210,7 +210,7 @@ export class OAuthHandler {
   /**
    * Handle status request
    */
-  private async handleStatusRequest(req: any, res: any): Promise<void> {
+  private async handleStatusRequest(_req: any, res: any): Promise<void> {
     const status = await this.oauthManager.getStatus();
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(status));
@@ -250,9 +250,9 @@ export class OAuthHandler {
             "Content-Length": Buffer.byteLength(params.toString()),
           },
         },
-        (res) => {
+        (res: any) => {
           let data = "";
-          res.on("data", (chunk) => {
+          res.on("data", (chunk: Buffer) => {
             data += chunk;
           });
           res.on("end", () => {

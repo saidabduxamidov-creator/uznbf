@@ -11,3 +11,5 @@ export * from "./metrics.js";
 export * from "./registry.js";
 export * from "./packages.js";
 export * from "./executor.js";
+export * from "./oauth.js";
+export * from "./ai-integration.js";

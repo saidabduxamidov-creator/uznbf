@@ -4,7 +4,6 @@
  * Tokens stored encrypted in the database, never in memory or config files.
  */
 
-import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
@@ -69,7 +68,7 @@ export class OAuthManager extends EventEmitter {
     try {
       require("fs").writeFileSync(keyPath, key.toString("hex"), { mode: 0o600 });
     } catch (e) {
-      this.logger?.warn?.("Failed to persist encryption key", e);
+      this.logger?.warn?.("Failed to persist encryption key", { error: String(e) });
     }
     return key;
   }
@@ -99,7 +98,7 @@ export class OAuthManager extends EventEmitter {
       decipher.setAuthTag(authTag);
       return decipher.update(encrypted, undefined, "utf8") + decipher.final("utf8");
     } catch (e) {
-      this.logger?.error?.("Failed to decrypt token", e);
+      this.logger?.error?.("Failed to decrypt token", { error: String(e) });
       throw new Error("Token decryption failed");
     }
   }
@@ -108,11 +107,11 @@ export class OAuthManager extends EventEmitter {
    * Store OAuth token (encrypted)
    */
   async storeToken(provider: AIProvider, token: OAuthToken): Promise<void> {
-    const encrypted: OAuthToken = {
+    const encrypted = {
       ...token,
       accessToken: this.encrypt(token.accessToken),
       refreshToken: token.refreshToken ? this.encrypt(token.refreshToken) : undefined,
-    };
+    } as OAuthToken;
 
     this.db.set(provider, encrypted);
     this.logger?.info?.(`OAuth token stored for ${provider}`);
@@ -137,9 +136,9 @@ export class OAuthManager extends EventEmitter {
         ...encrypted,
         accessToken: this.decrypt(encrypted.accessToken),
         refreshToken: encrypted.refreshToken ? this.decrypt(encrypted.refreshToken) : undefined,
-      };
+      } as OAuthToken;
     } catch (e) {
-      this.logger?.error?.(`Failed to retrieve token for ${provider}`, e);
+      this.logger?.error?.(`Failed to retrieve token for ${provider}`, { error: String(e) });
       return null;
     }
   }
@@ -162,7 +161,7 @@ export class OAuthManager extends EventEmitter {
   /**
    * Validate token with provider API
    */
-  async validateTokenWithProvider(provider: AIProvider, config: OAuthConfig): Promise<boolean> {
+  async validateTokenWithProvider(provider: AIProvider, _config: OAuthConfig): Promise<boolean> {
     const token = await this.getToken(provider);
     if (!token) return false;
 
@@ -178,7 +177,7 @@ export class OAuthManager extends EventEmitter {
           return true; // API key validation happens at tool execution time
       }
     } catch (e) {
-      this.logger?.error?.(`Token validation failed for ${provider}`, e);
+      this.logger?.error?.(`Token validation failed for ${provider}`, { error: String(e) });
       return false;
     }
   }
@@ -187,7 +186,7 @@ export class OAuthManager extends EventEmitter {
    * Validate ChatGPT token by calling models endpoint
    */
   private async validateChatGPTToken(accessToken: string): Promise<boolean> {
-    const https = require("https");
+    const https = require("https") as typeof import("https");
     return new Promise((resolve) => {
       const req = https.request(
         {
@@ -198,7 +197,7 @@ export class OAuthManager extends EventEmitter {
             Authorization: `Bearer ${accessToken}`,
           },
         },
-        (res) => {
+        (res: any) => {
           resolve(res.statusCode === 200);
         },
       );
@@ -248,13 +247,17 @@ export class OAuthManager extends EventEmitter {
    */
   async getStatus(): Promise<Record<AIProvider, { authenticated: boolean; expiresAt?: number }>> {
     const providers: AIProvider[] = ["chatgpt", "claude", "gemini"];
-    const status: Record<AIProvider, any> = {};
+    const status: Record<AIProvider, { authenticated: boolean; expiresAt?: number }> = {
+      chatgpt: { authenticated: false },
+      claude: { authenticated: false },
+      gemini: { authenticated: false },
+    };
 
     for (const provider of providers) {
       const token = await this.getToken(provider);
       status[provider] = {
         authenticated: !!token,
-        expiresAt: token?.expiresAt,
+        ...(token?.expiresAt && { expiresAt: token.expiresAt }),
       };
     }
 

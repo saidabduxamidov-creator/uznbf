@@ -3,8 +3,7 @@
  * Calls AI services using authenticated tokens from OAuthManager.
  */
 
-import { https } from "node:https";
-import type { Logger } from "@lmp/core";
+import https from "node:https";
 import type { OAuthManager, AIProvider } from "./oauth.js";
 
 export interface AICallOptions {
@@ -32,7 +31,6 @@ export interface AIResponse {
 export class AIIntegration {
   constructor(
     private oauthManager: OAuthManager,
-    private logger: Logger,
   ) {}
 
   /**
@@ -70,9 +68,9 @@ export class AIIntegration {
             Authorization: `Bearer ${token.accessToken}`,
           },
         },
-        (res) => {
+        (res: any) => {
           let data = "";
-          res.on("data", (chunk) => {
+          res.on("data", (chunk: Buffer) => {
             data += chunk;
           });
           res.on("end", () => {
@@ -82,10 +80,10 @@ export class AIIntegration {
               }
               const response = JSON.parse(data);
               resolve({
-                provider: "chatgpt",
+                provider: "chatgpt" as const,
                 content: response.choices[0]?.message?.content || "",
                 usage: response.usage,
-                model: response.model,
+                model: response.model || options.model,
               });
             } catch (e) {
               reject(e);
@@ -141,9 +139,9 @@ export class AIIntegration {
             "anthropic-version": "2023-06-01",
           },
         },
-        (res) => {
+        (res: any) => {
           let data = "";
-          res.on("data", (chunk) => {
+          res.on("data", (chunk: Buffer) => {
             data += chunk;
           });
           res.on("end", () => {
@@ -153,10 +151,10 @@ export class AIIntegration {
               }
               const response = JSON.parse(data);
               resolve({
-                provider: "claude",
+                provider: "claude" as const,
                 content: response.content[0]?.text || "",
                 usage: response.usage,
-                model: response.model,
+                model: response.model || options.model,
               });
             } catch (e) {
               reject(e);
@@ -213,9 +211,9 @@ export class AIIntegration {
             "Content-Length": Buffer.byteLength(postData),
           },
         },
-        (res) => {
+        (res: any) => {
           let data = "";
-          res.on("data", (chunk) => {
+          res.on("data", (chunk: Buffer) => {
             data += chunk;
           });
           res.on("end", () => {
@@ -226,14 +224,14 @@ export class AIIntegration {
               const response = JSON.parse(data);
               const text = response.candidates[0]?.content?.parts[0]?.text || "";
               resolve({
-                provider: "gemini",
+                provider: "gemini" as const,
                 content: text,
                 usage: {
                   promptTokens: response.usageMetadata?.promptTokenCount,
                   completionTokens: response.usageMetadata?.candidatesTokenCount,
                   totalTokens: response.usageMetadata?.totalTokenCount,
                 },
-                model: options.model,
+                model: options.model || "gemini-2.0-flash",
               });
             } catch (e) {
               reject(e);
