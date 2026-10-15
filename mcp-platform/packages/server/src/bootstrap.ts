@@ -39,6 +39,7 @@ import {
 } from "@lmp/kernel";
 import { McpAdapter } from "./mcp/adapter.js";
 import { createPlatformPackage } from "./platform-package.js";
+import { OAuthManager, AIIntegration } from "@lmp/kernel";
 
 export interface PlatformOptions {
   /** Puts config, data, cache and logs under one root (portable/test mode). */
@@ -66,6 +67,8 @@ export interface Platform {
   readonly packages: PackageManager;
   readonly executor: ToolExecutor;
   readonly adapter: McpAdapter;
+  readonly oauthManager: OAuthManager;
+  readonly aiIntegration: AIIntegration;
   shutdown(reason: string): Promise<void>;
 }
 
@@ -225,6 +228,9 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
     watcher.start();
     onCleanup("config watcher", () => watcher.stop());
 
+    const oauthManager = new OAuthManager(paths.dataDir, logger.child({ component: "oauth" }));
+    const aiIntegration = new AIIntegration(oauthManager);
+
     const adapter = new McpAdapter({ registry, executor, logger: logger.child({ component: "mcp" }), instructions: SERVER_INSTRUCTIONS });
     onCleanup("mcp", () => adapter.close());
 
@@ -245,7 +251,7 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
       return shuttingDown;
     };
 
-    return { config, paths, configFile: loaded.file, logger, registry, packages, executor, adapter, shutdown };
+    return { config, paths, configFile: loaded.file, logger, registry, packages, executor, adapter, oauthManager, aiIntegration, shutdown };
   } catch (error) {
     logger.fatal("startup failed", { error });
     for (const cleanup of [...cleanups].reverse()) {

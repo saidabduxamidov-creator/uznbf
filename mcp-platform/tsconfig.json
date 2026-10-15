@@ -54,6 +54,9 @@
     },
     {
       "path": "packages/tools/photoshop"
+    },
+    {
+      "path": "packages/tools/ai"
     }
   ]
 }
